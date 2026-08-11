@@ -1,0 +1,25 @@
+/* ── Overview stat cards (Meridian KpiCard) ── */
+.ov-hero{background:linear-gradient(145deg,rgba(22,25,39,1),rgba(18,21,34,1));border:1px solid rgba(38,45,61,0.6);border-radius:var(--radius);padding:1.75rem 2rem;color:var(--text);position:relative;overflow:hidden;box-shadow:var(--card-shadow);margin-bottom:2rem}
+.ov-hero:hover{transform:none}
+.ov-hero-ghost{position:absolute;right:-8px;top:-12px;font-size:96px;color:rgba(255,255,255,0.025);pointer-events:none;line-height:1}
+.ov-hero-label{font-size:11px;font-weight:600;color:var(--text3);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px;font-family:'DM Sans',sans-serif}
+.ov-hero-value{font-size:30px;font-weight:700;letter-spacing:-1.5px;line-height:1;color:var(--text);font-family:'JetBrains Mono','Courier New',monospace}
+.ov-hero-change{display:inline-flex;align-items:center;gap:4px;margin-top:12px;font-size:11px;font-weight:700;background:var(--green-bg);color:var(--green);border-radius:6px;padding:3px 8px;font-family:'JetBrains Mono',monospace}
+.ov-hero-change.neg{background:var(--red-bg);color:var(--red)}
+
+/* ── Chart card ── */
+.card{background:linear-gradient(145deg,rgba(22,25,39,1),rgba(20,22,35,1));border:1px solid rgba(38,45,61,0.6);border-radius:var(--radius);padding:1.25rem 1.5rem;margin-bottom:1.25rem;box-shadow:var(--card-shadow)}
+.card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;gap:10px}
+.card-title{font-size:14px;font-weight:700;color:var(--text);letter-spacing:-0.2px;font-family:'Outfit',sans-serif}
+.card-sub{font-size:11px;color:var(--text2);margin-top:2px}
+.chart-wrap{position:relative;width:100%}
+
+/* Period selector */
+.period-tabs{display:flex;gap:0;background:var(--surface2);border-radius:var(--radius-xs);padding:2px}
+.period-btn{padding:4px 11px;border-radius:4px;border:none;background:none;font-size:11px;color:var(--text3);cursor:pointer;font-family:inherit;transition:all 0.12s;font-weight:500}
+.period-btn:hover{color:var(--text2)}
+.period-btn.active{background:var(--surface3);color:var(--accent);font-weight:600}
+@media(max-width:768px){
+  .period-btn{padding:4px 7px;font-size:10px}
+}
+

@@ -1,0 +1,19 @@
+/* ── FIX OVERFLOW GRAFICI MOBILE ── */
+/* Previene espansione incontrollata dei contenitori Grid/Flex causata da Chart.js su device ad alto DPR */
+.alloc-grid,
+.alloc-grid > div,
+.card,
+.ins-section-block,
+.chart-wrap {
+  min-width: 0;
+  max-width: 100%;
+}
+/* Il canvas non può mai superare la larghezza del padre */
+.chart-wrap canvas {
+  max-width: 100%;
+}
+/* Sicurezza globale: impedisce scroll orizzontale imprevisto */
+html, body {
+  overflow-x: hidden;
+  width: 100%;
+}

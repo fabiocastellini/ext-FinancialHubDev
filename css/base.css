@@ -1,0 +1,36 @@
+:root {
+  /* Meridian exact tokens */
+  --bg:       #0e1117;
+  --surface:  #141927;
+  --surface2: #181f30;
+  --surface3: #1e2638;
+  --border:   rgba(255,255,255,0.08);
+  --border2:  rgba(255,255,255,0.14);
+  --text:     #f2f4f0;
+  --text2:    #7a8599;
+  --text3:    #3e4d60;
+  --accent:   #10d4b0;          /* oklch(0.78 0.16 182) */
+  --accent-dim: rgba(16,212,176,0.1);
+  --green:    #10d08a;          /* fin-gain oklch(0.76 0.16 162) */
+  --green-bg: rgba(16,208,138,0.1);
+  --red:      #e05050;          /* fin-loss oklch(0.62 0.22 18) */
+  --red-bg:   rgba(224,80,80,0.1);
+  --blue:     #60a8f5;
+  --card-shadow: rgba(14,63,126,0.04) 0px 0px 0px 1px, rgba(42,51,69,0.06) 0px 1px 2px, rgba(42,51,70,0.06) 0px 4px 8px, rgba(14,63,126,0.04) 0px 16px 24px;
+  --radius: 16px;
+  --radius-sm: 12px;
+  --radius-xs: 8px;
+  --shadow: var(--card-shadow);
+  --shadow-md: var(--card-shadow);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;min-height:100vh}
+.layout{display:flex;flex-direction:column;min-height:100vh;position:relative}
+
+/* ── Atmospheric background glow (Meridian signature) ── */
+.layout::before,.layout::after{content:'';position:fixed;pointer-events:none;border-radius:50%;z-index:0}
+.layout::before{width:600px;height:600px;top:-100px;left:20%;background:rgba(16,212,176,0.03);filter:blur(120px);animation:float 6s ease-in-out infinite}
+.layout::after{width:500px;height:500px;bottom:-100px;right:20%;background:rgba(96,168,245,0.02);filter:blur(100px);animation:float 6s ease-in-out infinite;animation-delay:3s}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes pulse-soft{0%,100%{opacity:1}50%{opacity:0.5}}
+

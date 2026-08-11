@@ -1,0 +1,56 @@
+/* ── SQL notice ── */
+.sql-box{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:1rem 1.25rem;font-family:monospace;font-size:12px;color:var(--text2);white-space:pre;overflow-x:auto;margin:0.75rem 0}
+
+/* ── Cashflow ── */
+.cf-type-btn{display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:var(--radius-sm);border:1px solid var(--border2);background:none;color:var(--text2);font-size:14px;font-family:inherit;cursor:pointer;font-weight:500;transition:all 0.15s}
+.cf-type-btn:hover{background:var(--surface2);color:var(--text)}
+.cf-type-btn.active[data-type="expense"]{background:var(--red-bg);color:var(--red);border-color:var(--red)}
+.cf-type-btn.active[data-type="income"]{background:var(--green-bg);color:var(--green);border-color:var(--green)}
+.cf-type-btn.active[data-type="transfer"]{background:rgba(249,115,22,0.12);color:#f97316;border-color:#f97316}
+.cf-type-btn.active[data-ctx]{background:var(--accent);color:#0e1117;border-color:var(--accent);box-shadow:0 2px 8px rgba(16,212,176,0.25);font-weight:600}
+.cf-type-btn.active[data-itype="purchase"]{background:rgba(14,165,233,0.12);color:#0ea5e9;border-color:#0ea5e9}
+.cf-type-btn.active[data-itype="sale"]{background:rgba(245,158,11,0.12);color:#f59e0b;border-color:#f59e0b}
+.cf-type-btn.active[data-itype="expense"]{background:var(--red-bg);color:var(--red);border-color:var(--red)}
+.cf-type-btn.active[data-itype="income"]{background:var(--green-bg);color:var(--green);border-color:var(--green)}
+@media(max-width:768px){
+  .cf-tx-type-row{flex-wrap:nowrap!important}
+  .cf-tx-type-row .cf-type-btn{flex:1;padding:9px 4px;font-size:12px;gap:4px;justify-content:center;white-space:nowrap}
+}
+/* FAB */
+#cf-fab{position:fixed;bottom:2rem;right:2rem;width:52px;height:52px;border-radius:50%;background:var(--accent);color:#0e1117;border:none;font-size:24px;cursor:pointer;box-shadow:0 4px 20px rgba(16,212,176,0.35);display:flex;align-items:center;justify-content:center;transition:transform 0.15s,box-shadow 0.15s;z-index:50;font-weight:700}@media(max-width:768px){#cf-fab{bottom:78px;right:1.25rem;width:46px;height:46px;font-size:20px}}
+#cf-fab:hover{transform:scale(1.08);box-shadow:0 6px 24px rgba(16,212,176,0.45)}
+/* Account blocks */
+.cf-account-block{background:linear-gradient(145deg,rgba(22,25,39,1),rgba(18,21,34,1));border:1px solid rgba(38,45,61,0.6);border-radius:var(--radius);margin-bottom:12px;box-shadow:var(--card-shadow);overflow:hidden}
+.cf-account-header{display:flex;align-items:center;gap:14px;padding:1rem 1.375rem;cursor:pointer;transition:background 0.12s}
+.cf-account-header:hover{background:rgba(255,255,255,0.03)}
+.cf-account-header.open{border-bottom:1px solid var(--border)}
+.cf-account-icon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.cf-account-text{flex:1;min-width:0;overflow:hidden}.cf-account-name{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cf-account-pct{font-size:12px;color:var(--text2);margin-top:1px;text-align:right}
+.cf-account-count{font-size:13px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cf-account-sub{font-size:12px;color:var(--text2);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cf-account-val{text-align:right;flex-shrink:0;margin:0;padding:0;display:flex;flex-direction:column;justify-content:center}
+.cf-account-val-num{font-size:18px;font-weight:700;letter-spacing:-0.5px;font-family:"JetBrains Mono","Courier New",monospace}
+.cf-account-chevron{color:var(--text3);font-size:16px;transition:transform 0.2s;margin-left:8px}
+.cf-account-header.open .cf-account-chevron{transform:rotate(180deg)}
+.cf-account-body{display:none}
+.cf-account-body.open{display:block}
+.cf-tx-row{display:flex;align-items:center;gap:12px;padding:10px 1.25rem;border-bottom:1px solid var(--border)}
+.cf-tx-row:last-child{border-bottom:none}
+.cf-tx-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.cf-tx-desc{flex:1;min-width:0}
+.cf-tx-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cf-tx-cat{font-size:11px;color:var(--text3);margin-top:1px}
+.cf-tx-amount{font-size:14px;font-weight:700;white-space:nowrap;font-family:"JetBrains Mono","Courier New",monospace}
+.cf-tx-date{font-size:11px;color:var(--text3);white-space:nowrap}
+.cf-see-all{display:block;text-align:center;padding:10px;font-size:12px;color:var(--accent);cursor:pointer;font-weight:500;background:none;border:none;width:100%;font-family:inherit}
+.cf-see-all:hover{background:var(--surface2)}
+/* Category pill */
+.cat-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500}
+/* Settings */
+.settings-cat-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(38,45,61,0.4)}
+.settings-cat-row:last-child{border-bottom:none}
+.settings-recur-row{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.settings-recur-row:last-child{border-bottom:none}
+/* ── Cashflow ── */
+/* Mobile */
