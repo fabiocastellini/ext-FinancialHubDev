@@ -22,6 +22,11 @@ self.addEventListener('activate', e => {
 
 // Fetch: network first, fall back to cache for navigation
 self.addEventListener('fetch', e => {
+  const url = new URL(e.request.url);
+  
+  // Safely get origin from self.location (if browser) or from the request itself (if Cloudflare Worker)
+  const currentOrigin = self.location ? self.location.origin : url.origin;
+
   // Only handle same-origin requests
   if (!e.request.url.startsWith(self.location.origin)) return;
 

@@ -1397,10 +1397,36 @@ html, body {
 
   const APP_SECRET = 'zW32WdZ6sjemsWkQqXUc4Fvfa6TxtvIq6H63FsKYdzc'; // sent on every Supabase call; RLS policies require this header to match
 
-  const api = (path, opts={}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, 'Content-Type':'application/json', Prefer:'return=representation', 'X-App-Secret':APP_SECRET, ...opts.headers },
-    ...opts
-  }).then(r=>r.json());
+  const api = async (path, opts = {}) => {
+    // Extract custom headers so ...opts doesn't overwrite default headers
+    const { headers: customHeaders, body, ...restOpts } = opts;
+
+    const defaultHeaders = {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+      'X-App-Secret': typeof APP_SECRET !== 'undefined' ? APP_SECRET : ''
+    };
+
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      method: 'GET',
+      ...restOpts,
+      headers: { ...defaultHeaders, ...customHeaders },
+      // Automatically stringify object bodies if needed
+      body: (body && typeof body !== 'string') ? JSON.stringify(body) : body
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    // Throw detailed error if status is not 2xx (e.g., 400 Bad Request)
+    if (!response.ok) {
+      console.error('🔴 Supabase API Error:', data);
+      throw new Error(data.message || data.details || `HTTP ${response.status}`);
+    }
+
+    return data;
+  };
 
   let holdings=[], transactions=[], prices={}, snapshots=[], txFilter='all', activePeriod=30;
   let trendChart, liquidityChart, monthlyChart, yearlyIncomeChart, yearlyOutcomeChart, savingsChart, investedChart;
@@ -2509,24 +2535,24 @@ html, body {
       // avg_cost is always stored per-unit in the database.
       const avg_cost = hCostMode==='total' ? costInput/qty : costInput;
 
-      // Asset Allocation Breakdown Extraction
-      let allocationData = {};
-      if (type === 'fund') {
-        const stockPct = parseFloat(document.getElementById('h-stock-pct')?.value) || 0;
-        const bondPct  = parseFloat(document.getElementById('h-bond-pct')?.value)  || 0;
-        const cashPct  = parseFloat(document.getElementById('h-cash-pct')?.value)  || 0;
+      // TODO: Asset Allocation Breakdown Extraction
+      // let allocationData = {};
+      // if (type === 'fund') {
+      //   const stockPct = parseFloat(document.getElementById('h-fund-pstock')?.value) || 0;
+      //   const bondPct  = parseFloat(document.getElementById('h-fund-pbond')?.value)  || 0;
+      //   const cashPct  = parseFloat(document.getElementById('h-fund-pcash')?.value)  || 0;
 
-        if (stockPct + bondPct + cashPct > 100) {
-          await showAlert('Total asset allocation percentages cannot exceed 100%.');
-          return;
-        }
+      //   if (stockPct + bondPct + cashPct > 100) {
+      //     await showAlert('Total asset allocation percentages cannot exceed 100%.');
+      //     return;
+      //   }
 
-        // Supports both camelCase and snake_case column names for DB flexibility
-        allocationData = {
-          stockPct, bondPct, cashPct,
-          stock_pct: stockPct, bond_pct: bondPct, cash_pct: cashPct
-        };
-      }
+      //   // Supports both camelCase and snake_case column names for DB flexibility
+      //   allocationData = {
+      //     stockPct, bondPct, cashPct,
+      //     stock_pct: stockPct, bond_pct: bondPct, cash_pct: cashPct
+      //   };
+      // }
       // ───────────────────────────────────────────────────────────────────
 
       const existing=holdings.find(h=>h.ticker===ticker);
@@ -2542,7 +2568,6 @@ html, body {
           body:JSON.stringify({
             qty:newQty,
             avg_cost:totalCost/newQty,
-            ...allocationData
           })
         });
       } else {
@@ -2554,7 +2579,6 @@ html, body {
             type,
             qty,
             avg_cost,
-            ...allocationData
           })
         });
       }
