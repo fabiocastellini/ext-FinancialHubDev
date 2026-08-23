@@ -1,9 +1,31 @@
-function showSettingsMain(){
+import { exposeLegacyFunctions } from './utils/legacy.js';
+
+import { state } from './state.js';
+import { api } from './api.js';
+import { TYPE_ICONS } from './config.js';
+
+import {fmt, fmtN, fmtPct} from './utils/date.js';
+
+import { cleanCryptoName } from './utils/calculations.js';
+import { catDisplayLabel, setTriggerIcon, openSelectPicker } from './components/select-picker.js';
+import { openModal, closeModal, showAlert, showConfirm, toast } from './components/modal.js';
+import { renderAllTxBody, applyBalanceChange, renderCashflow, cfTxRow } from './features/cashflow.js';
+
+import { showPage } from './features/navigation.js';
+
+import { renderOverview } from './features/overview.js'
+
+// ── Settings ──
+let recurCalYear = new Date().getFullYear();
+let recurCalMonth = new Date().getMonth();
+let categoryDetailId;
+
+export function showSettingsMain(){
   document.getElementById('settings-main').style.display='';
   ['calendar','categories','backup'].forEach(s=>document.getElementById('settings-'+s).style.display='none');
 }
 
-function showSettingsSection(section){
+export function showSettingsSection(section){
   document.getElementById('settings-main').style.display='none';
   ['calendar','categories','backup'].forEach(s=>document.getElementById('settings-'+s).style.display=s===section?'':'none');
   if(section==='calendar'){ renderRecurCalendar(); }
@@ -11,15 +33,15 @@ function showSettingsSection(section){
   if(section==='backup'){ loadSnapshots(); }
 }
 
-function recurCalPrev(){ recurCalMonth--; if(recurCalMonth<0){recurCalMonth=11;recurCalYear--;} renderRecurCalendar(); }
-function recurCalNext(){ recurCalMonth++; if(recurCalMonth>11){recurCalMonth=0;recurCalYear++;} renderRecurCalendar(); }
+export function recurCalPrev(){ recurCalMonth--; if(recurCalMonth<0){recurCalMonth=11;recurCalYear--;} renderRecurCalendar(); }
+export function recurCalNext(){ recurCalMonth++; if(recurCalMonth>11){recurCalMonth=0;recurCalYear++;} renderRecurCalendar(); }
 
-function getRecurrenceDaysInMonth(year, month){
+export function getRecurrenceDaysInMonth(year, month){
   // For each active recurrence, find all occurrences within this month
   const results = []; // {day, recurrence}
   const monthStart = new Date(year, month, 1);
   const monthEnd   = new Date(year, month+1, 0, 23, 59, 59);
-  cfRecurrences.forEach(r=>{
+  state.cfRecurrences.forEach(r=>{
     if(!r.active) return;
     // Walk from recurrence start (or next_due going backwards) through the month
     // Simulate occurrences: start from next_due and walk backwards/forwards
@@ -51,7 +73,7 @@ function getRecurrenceDaysInMonth(year, month){
   return results;
 }
 
-function renderRecurCalendar(){
+export function renderRecurCalendar(){
   const label = document.getElementById('recur-cal-label');
   const calEl = document.getElementById('recur-calendar');
   if(!label||!calEl) return;
@@ -83,7 +105,7 @@ function renderRecurCalendar(){
     const isToday = today.getFullYear()===recurCalYear && today.getMonth()===recurCalMonth && today.getDate()===d;
     const dayEvents = byDay[d]||[];
     const evHtml = dayEvents.slice(0,3).map(r=>{
-      const cat = cfCategories.find(c=>c.id===r.category_id);
+      const cat = state.cfCategories.find(c=>c.id===r.category_id);
       const color = cat?.color||'var(--accent)';
       const icon  = cat?.icon||'ti-repeat';
       const label = r.description||cat?.name||'Recurring';
@@ -128,7 +150,7 @@ function renderRecurCalendar(){
       let pills='';
       const MAX_PILLS=3;
       dayEvents.slice(0,MAX_PILLS).forEach(r=>{
-        const cat=cfCategories.find(c=>c.id===r.category_id);
+        const cat=state.cfCategories.find(c=>c.id===r.category_id);
         const color=cat?.color||'var(--accent)';
         const label=r.description||cat?.name||'';
         pills+=`<div style="background:${color};color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:1px;line-height:1.4">${label}</div>`;
@@ -150,26 +172,26 @@ function renderRecurCalendar(){
   calEl.innerHTML = '<div class="recur-cal-wrapper">' + html + '</div>';
 }
 
-function renderSettings(){
+export function renderSettings(){
   const catEl=document.getElementById('settings-cats');
   if(catEl){
-    const topCats = cfCategories.filter(c=>!c.parent_id);
+    const topCats = state.cfCategories.filter(c=>!c.parent_id);
     catEl.innerHTML = topCats.length ? topCats.map(c=>{
-      const subCount = cfCategories.filter(s=>s.parent_id===c.id).length;
+      const subCount = state.cfCategories.filter(s=>s.parent_id===c.id).length;
       return `<div class="settings-cat-row" style="cursor:pointer" onclick="openCatDetailModal('${c.id}')">
           <i class="ti ${c.icon}" style="color:${c.color};font-size:18px;width:24px;text-align:center"></i>
           <span style="flex:1;font-size:13px">${c.name}${subCount?` <span style="color:var(--text3);font-size:11px">(${subCount})</span>`:''}</span>
-          <button class="btn btn-sm" onclick="event.stopPropagation();openCatModal('${c.id}')" style="margin-right:4px"><i class="ti ti-pencil"></i></button>
+          <button class="btn btn-sm" onclick="event.stopPropagation();openCategoryModal('${c.id}')" style="margin-right:4px"><i class="ti ti-pencil"></i></button>
           <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteCat('${c.id}')"><i class="ti ti-trash"></i></button>
         </div>`;
     }).join('') : '<div style="color:var(--text3);font-size:13px;padding:0.5rem 0">No categories yet</div>';
   }
 
   const recEl=document.getElementById('settings-recurrences');
-  if(recEl) recEl.innerHTML=cfRecurrences.length
-    ?cfRecurrences.map(r=>{
-        const cat=cfCategories.find(c=>c.id===r.category_id);
-        const h=holdings.find(x=>x.id===r.holding_id);
+  if(recEl) recEl.innerHTML=state.cfRecurrences.length
+    ?state.cfRecurrences.map(r=>{
+        const cat=state.cfCategories.find(c=>c.id===r.category_id);
+        const h=state.holdings.find(x=>x.id===r.holding_id);
         const hName=h?(h.type==='crypto'?cleanCryptoName(h.name||h.ticker):(h.name||h.ticker)):'—';
         const due=new Date(r.next_due).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:'Europe/Rome'});
         const color=cat?.color||'var(--accent)';
@@ -203,7 +225,7 @@ const ICON_LIBRARY = [
   'ti-heart','ti-mood-smile','ti-walk','ti-run','ti-needle','ti-first-aid-kit',
 ];
 
-function buildIconGrid(){
+export function buildIconGrid(){
   const grid=document.getElementById('cat-icon-grid'); if(!grid) return;
   const selectedIcon=document.getElementById('cat-icon')?.value||'ti-tag';
   grid.innerHTML=ICON_LIBRARY.map(icon=>{
@@ -218,13 +240,13 @@ function buildIconGrid(){
   }).join('');
 }
 
-function selectIcon(icon){
+export function selectIcon(icon){
   document.getElementById('cat-icon').value=icon;
   updateIconPreview(icon);
   buildIconGrid(); // rebuild so only selected icon is highlighted
 }
 
-function updateIconPreview(icon){
+export function updateIconPreview(icon){
   const prev=document.getElementById('cat-icon-preview'); if(!prev) return;
   const color=document.getElementById('cat-color')?.value||'#6366f1';
   prev.style.color=color;
@@ -237,37 +259,36 @@ function updateIconPreview(icon){
   if(hexEl) hexEl.textContent=color;
 }
 
-let catDetailId = null;
-function openCatDetailModal(id){
-  catDetailId = id;
-  const cat = cfCategories.find(c=>c.id===id);
+export function openCatDetailModal(id){
+  categoryDetailId = id;
+  const cat = state.cfCategories.find(c=>c.id===id);
   if(!cat) return;
   document.getElementById('catdetail-icon').innerHTML = `<i class="ti ${cat.icon}"></i>`;
   document.getElementById('catdetail-icon').style.background = cat.color+'26';
   document.getElementById('catdetail-icon').style.color = cat.color;
   document.getElementById('catdetail-name').textContent = cat.name;
-  const subs = cfCategories.filter(c=>c.parent_id===id).sort((a,b)=>a.name.localeCompare(b.name));
+  const subs = state.cfCategories.filter(c=>c.parent_id===id).sort((a,b)=>a.name.localeCompare(b.name));
   document.getElementById('catdetail-count').textContent = `${subs.length} sub-categor${subs.length===1?'y':'ies'}`;
   document.getElementById('catdetail-sublist').innerHTML = subs.length ? subs.map(s=>`
     <div class="settings-cat-row">
       <i class="ti ${cat.icon}" style="color:${cat.color};font-size:16px;width:22px;text-align:center"></i>
       <span style="flex:1;font-size:13px">${s.name}</span>
-      <button class="btn btn-sm" onclick="closeModal('modal-cat-detail');openCatModal('${s.id}')" style="margin-right:4px"><i class="ti ti-pencil"></i></button>
+      <button class="btn btn-sm" onclick="closeModal('modal-cat-detail');openCategoryModal('${s.id}')" style="margin-right:4px"><i class="ti ti-pencil"></i></button>
       <button class="btn btn-sm btn-danger" onclick="deleteCatFromDetail('${s.id}')"><i class="ti ti-trash"></i></button>
     </div>`).join('') : '<div style="color:var(--text3);font-size:13px;padding:0.5rem 0">No sub-categories yet</div>';
   openModal('modal-cat-detail');
 }
 
-async function deleteCatFromDetail(id){
+export async function deleteCatFromDetail(id){
   await deleteCat(id);
   // Keep the detail window open and refreshed, unless the parent itself no longer exists
-  if(cfCategories.find(c=>c.id===catDetailId)) openCatDetailModal(catDetailId);
+  if(state.cfCategories.find(c=>c.id===categoryDetailId)) openCatDetailModal(categoryDetailId);
   else closeModal('modal-cat-detail');
 }
 
-function openCatModal(id=null, presetParentId=null){
+export function openCategoryModal(id=null, presetParentId=null){
   document.getElementById('cat-edit-id').value=id||'';
-  const editingCat = id ? cfCategories.find(c=>c.id===id) : null;
+  const editingCat = id ? state.cfCategories.find(c=>c.id===id) : null;
   const isSubContext = presetParentId || (editingCat && editingCat.parent_id);
   document.getElementById('cat-modal-title').textContent = id
     ? (isSubContext ? 'Edit subcategory' : 'Edit category')
@@ -279,7 +300,7 @@ function openCatModal(id=null, presetParentId=null){
     document.getElementById('cat-parent').value=presetParentId||'';
     updateIconPreview('ti-tag');
   } else {
-    const cat=cfCategories.find(c=>c.id===id);
+    const cat=state.cfCategories.find(c=>c.id===id);
     if(cat){
       document.getElementById('cat-name').value=cat.name;
       document.getElementById('cat-icon').value=cat.icon||'ti-tag';
@@ -293,9 +314,9 @@ function openCatModal(id=null, presetParentId=null){
   openModal('modal-cat');
 }
 
-function updateCatParentUI(){
+export function updateCatParentUI(){
   const parentId = document.getElementById('cat-parent').value;
-  const parent = cfCategories.find(c=>c.id===parentId);
+  const parent = state.cfCategories.find(c=>c.id===parentId);
   document.getElementById('cat-parent-label').textContent = parent ? parent.name : 'None — top-level category';
   const isSub = !!parent;
   document.getElementById('cat-icon-section').style.display = isSub ? 'none' : '';
@@ -308,12 +329,12 @@ function updateCatParentUI(){
   }
 }
 
-function openCatParentPicker(){
+export function openCatParentPicker(){
   const editId = document.getElementById('cat-edit-id').value;
   const current = document.getElementById('cat-parent').value;
   // Only top-level categories can be a parent — this keeps sub-categories to a single level
   // and excluding the category itself prevents it becoming its own parent.
-  const topCats = cfCategories.filter(c=>!c.parent_id && c.id!==editId);
+  const topCats = state.cfCategories.filter(c=>!c.parent_id && c.id!==editId);
   const options = [{value:'', label:'None — top-level category', icon:'ti-x', color:'var(--text3)'}]
     .concat(topCats.map(c=>({value:c.id, label:c.name, icon:c.icon, color:c.color})));
   openSelectPicker('Parent category', options, current, (val)=>{
@@ -322,7 +343,7 @@ function openCatParentPicker(){
   });
 }
 
-async function saveCat(){
+export async function saveCat(){
   const name=document.getElementById('cat-name').value.trim();
   const icon=document.getElementById('cat-icon').value.trim()||'ti-tag';
   const color=document.getElementById('cat-color').value||'#6366f1';
@@ -331,7 +352,7 @@ async function saveCat(){
   if(!name){await showAlert('Please enter a name.');return;}
   if(parentId===editId){await showAlert('A category cannot be its own parent.');return;}
   // Duplicate name check — scoped to siblings (same parent), case-insensitive, excluding current if editing
-  const duplicate = cfCategories.find(c=>c.name.toLowerCase()===name.toLowerCase()&&c.id!==editId&&(c.parent_id||null)===parentId);
+  const duplicate = state.cfCategories.find(c=>c.name.toLowerCase()===name.toLowerCase()&&c.id!==editId&&(c.parent_id||null)===parentId);
   if(duplicate){await showAlert(`A category named "${duplicate.name}" already exists ${parentId?'under this parent':'at the top level'}. Please choose a different name.`);return;}
   let newCatId=null;
   if(editId){
@@ -340,7 +361,7 @@ async function saveCat(){
     const created=await api('cashflow_categories',{method:'POST',body:JSON.stringify({name,icon,color,parent_id:parentId})});
     if(Array.isArray(created)&&created[0]) newCatId=created[0].id;
   }
-  cfCategories=await api('cashflow_categories?order=name.asc');
+  state.cfCategories=await api('cashflow_categories?order=name.asc');
   closeModal('modal-cat'); renderSettings();
   toast(editId?'Category updated ✓':'Category saved ✓');
 
@@ -348,7 +369,7 @@ async function saveCat(){
   if(newCatId && catCreateTargetField){
     const field = catCreateTargetField;
     catCreateTargetField = null;
-    const cat = cfCategories.find(c=>c.id===newCatId);
+    const cat = state.cfCategories.find(c=>c.id===newCatId);
     const labelId = field+'-label', triggerId = field+'-trigger', iconId = field+'-icon';
     document.getElementById(field).value = newCatId;
     document.getElementById(labelId).textContent = catDisplayLabel(cat);
@@ -357,10 +378,10 @@ async function saveCat(){
   }
 }
 
-async function deleteCat(id){
-  const usedCount = cfTransactions.filter(t=>t.category_id===id).length;
-  const recurCount = cfRecurrences.filter(r=>r.category_id===id).length;
-  const subCount = cfCategories.filter(c=>c.parent_id===id).length;
+export async function deleteCat(id){
+  const usedCount = state.cfTransactions.filter(t=>t.category_id===id).length;
+  const recurCount = state.cfRecurrences.filter(r=>r.category_id===id).length;
+  const subCount = state.cfCategories.filter(c=>c.parent_id===id).length;
   if(subCount>0||usedCount>0||recurCount>0){
     const parts=[];
     if(usedCount>0) parts.push(`${usedCount} transaction${usedCount!==1?'s':''}`);
@@ -384,7 +405,7 @@ async function deleteCat(id){
   }
   await api(`cashflow_categories?id=eq.${id}`,{method:'DELETE'});
   // Reload everything so UI reflects changes
-  [cfCategories, cfTransactions, cfRecurrences] = await Promise.all([
+  [state.cfCategories, state.cfTransactions, state.cfRecurrences] = await Promise.all([
     api('cashflow_categories?order=name.asc'),
     api('cashflow_transactions?order=date.desc'),
     api('recurrences?order=next_due.asc'),
@@ -392,16 +413,16 @@ async function deleteCat(id){
   renderSettings(); renderCashflow(); toast('Category removed');
 }
 
-async function toggleRecurActive(id,active){
+export async function toggleRecurActive(id,active){
   await api(`recurrences?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({active})});
-  cfRecurrences=await api('recurrences?order=next_due.asc');
+  state.cfRecurrences=await api('recurrences?order=next_due.asc');
   renderSettings(); toast(active?'Recurrence resumed':'Recurrence paused');
 }
 
-async function deleteRecur(id){
+export async function deleteRecur(id){
   if(!await showConfirm('Delete this recurrence?')) return;
   await api(`recurrences?id=eq.${id}`,{method:'DELETE'});
-  cfRecurrences=await api('recurrences?order=next_due.asc');
+  state.cfRecurrences=await api('recurrences?order=next_due.asc');
   renderSettings(); toast('Recurrence removed');
 }
 
@@ -411,11 +432,11 @@ async function deleteRecur(id){
 // ─────────────────────────────────────────
 let mobileAnalyticsPage = 'insights';
 
-function showMobileRptInsights(){
+export function showMobileRptInsights(){
   showPage(mobileAnalyticsPage, null);
 }
 
-function switchMobileAnalytics(page){
+export function switchMobileAnalytics(page){
   mobileAnalyticsPage = page;
   showPage(page, null);
 }
@@ -423,12 +444,12 @@ function switchMobileAnalytics(page){
 // ─────────────────────────────────────────
 // CALENDAR DAY DETAIL
 // ─────────────────────────────────────────
-function showCalDayDetail(day, month, year){
+export function showCalDayDetail(day, month, year){
   const events = getRecurrenceDaysInMonth(year, month).filter(e=>e.day===day).map(e=>e.recurrence);
   if(!events.length) return;
   const date = new Date(year,month,day).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   let rows = events.map(r=>{
-    const cat = cfCategories.find(c=>c.id===r.category_id);
+    const cat = state.cfCategories.find(c=>c.id===r.category_id);
     const color = cat?.color||'var(--accent)';
     const icon  = cat?.icon||'ti-repeat';
     const freq  = r.frequency==='monthly'?'Monthly':r.frequency==='weekly'?'Weekly':r.frequency==='yearly'?'Yearly':r.frequency||'';
@@ -456,7 +477,7 @@ function showCalDayDetail(day, month, year){
 // ─────────────────────────────────────────
 // CASHFLOW SEARCH & BULK DELETE
 // ─────────────────────────────────────────
-function toggleCfSearch(){
+export function toggleCfSearch(){
   const wrap=document.getElementById('cf-search-wrap');
   const toggle=document.getElementById('cf-search-toggle');
   if(!wrap||!toggle) return;
@@ -468,7 +489,7 @@ function toggleCfSearch(){
     closeCfSearch();
   }
 }
-function closeCfSearch(){
+export function closeCfSearch(){
   const wrap=document.getElementById('cf-search-wrap');
   const toggle=document.getElementById('cf-search-toggle');
   const input=document.getElementById('cf-search');
@@ -477,8 +498,8 @@ function closeCfSearch(){
   if(wrap) wrap.style.display='none';
   if(toggle) toggle.style.display='';
 }
-function onCfSearch(q){
-  cfSearchQuery = q.trim().toLowerCase();
+export function onCfSearch(q){
+  let cfSearchQuery = q.trim().toLowerCase();
   const accountsEl = document.getElementById('cf-accounts');
   const searchEl   = document.getElementById('cf-search-results');
   if(cfSearchQuery.length < 2){
@@ -486,11 +507,11 @@ function onCfSearch(q){
     if(accountsEl) accountsEl.style.display = '';
     return;
   }
-  const results = cfTransactions.filter(t=>{
+  const results = state.cfTransactions.filter(t=>{
     const desc    = (t.description||'').toLowerCase();
-    const cat     = cfCategories.find(c=>c.id===t.category_id);
+    const cat     = state.cfCategories.find(c=>c.id===t.category_id);
     const catName = (cat?.name||'').toLowerCase();
-    const h       = holdings.find(x=>x.id===t.holding_id);
+    const h       = state.holdings.find(x=>x.id===t.holding_id);
     const hName   = (h?.name||h?.ticker||'').toLowerCase();
     return desc.includes(cfSearchQuery)||catName.includes(cfSearchQuery)||hName.includes(cfSearchQuery);
   });
@@ -511,7 +532,7 @@ function onCfSearch(q){
   });
   let html = '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">'+results.length+' result'+(results.length!==1?'s':'')+' for "'+cfSearchQuery+'"</div>';
   Object.entries(grouped).forEach(([hId, txs])=>{
-    const h = holdings.find(x=>x.id===hId);
+    const h = state.holdings.find(x=>x.id===hId);
     const dispName = h ? (h.type==='crypto'?cleanCryptoName(h.name||h.ticker):(h.name||h.ticker)) : 'Unknown account';
     const color = h ? (typeColorMap[h.type]||'#888') : 'var(--text3)';
     const icon  = h ? (TYPE_ICONS[h.type]||'ti-wallet') : 'ti-wallet';
@@ -527,20 +548,20 @@ function onCfSearch(q){
   searchEl.innerHTML = html;
 }
 
-function setBulkSelectMode(on){
-  bulkSelectMode = on;
-  selectedTxIds.clear();
+export function setBulkSelectMode(on){
+  state.bulkSelectMode = on;
+  state.selectedTxIds.clear();
   updateBulkDeleteBtn();
 
   ['cf-bulk-toggle','alltx-bulk-toggle'].forEach(id=>{
     const btn = document.getElementById(id);
     if(!btn) return;
-    btn.style.background = bulkSelectMode ? 'var(--surface2)' : '';
-    btn.innerHTML = bulkSelectMode
+    btn.style.background = state.bulkSelectMode ? 'var(--surface2)' : '';
+    btn.innerHTML = state.bulkSelectMode
       ? '<i class="ti ti-x"></i> Cancel'
       : '<i class="ti ti-checkbox"></i> Select';
   });
-  document.getElementById('bulk-toolbar')?.classList.toggle('open', bulkSelectMode);
+  document.getElementById('bulk-toolbar')?.classList.toggle('open', state.bulkSelectMode);
 
   // Check if we are in the "all transactions" sub-view or the main cashflow view
   const allTxBody = document.getElementById('alltx-body');
@@ -552,61 +573,61 @@ function setBulkSelectMode(on){
   } else {
     // Entering bulk mode: expand every account type so transactions are selectable.
     // Cancelling does NOT collapse them back — whatever was open stays open.
-    if(bulkSelectMode){
-      holdings.forEach(h=>cfOpenTypes.add(h.type));
+    if(state.bulkSelectMode){
+      state.holdings.forEach(h=>state.cfOpenTypes.add(h.type));
     }
     renderCashflow();
   }
 }
-function toggleBulkSelect(){ setBulkSelectMode(!bulkSelectMode); }
+export function toggleBulkSelect(){ setBulkSelectMode(!state.bulkSelectMode); }
 
 // ── Long-press to enter bulk-select (mobile: no persistent "Select" button) ──
 let _txPressTimer=null, _txPressMoved=false;
-function txTouchStart(id){
+export function txTouchStart(id){
   _txPressMoved=false;
   clearTimeout(_txPressTimer);
   _txPressTimer=setTimeout(()=>{
-    if(_txPressMoved || bulkSelectMode) return;
+    if(_txPressMoved || state.bulkSelectMode) return;
     setBulkSelectMode(true);
     toggleTxSelect(id);
     if(navigator.vibrate) navigator.vibrate(15);
   },550);
 }
-function txTouchMove(){ _txPressMoved=true; clearTimeout(_txPressTimer); }
-function txTouchEnd(){ clearTimeout(_txPressTimer); }
+export function txTouchMove(){ _txPressMoved=true; clearTimeout(_txPressTimer); }
+export function txTouchEnd(){ clearTimeout(_txPressTimer); }
 
-function toggleTxSelect(id){
-  if(selectedTxIds.has(id)) selectedTxIds.delete(id);
-  else selectedTxIds.add(id);
+export function toggleTxSelect(id){
+  if(state.selectedTxIds.has(id)) state.selectedTxIds.delete(id);
+  else state.selectedTxIds.add(id);
   const row = document.getElementById('cf-row-'+id);
   const chk = document.getElementById('chk-'+id);
-  if(row) row.classList.toggle('selected', selectedTxIds.has(id));
-  if(chk) chk.checked = selectedTxIds.has(id);
+  if(row) row.classList.toggle('selected', state.selectedTxIds.has(id));
+  if(chk) chk.checked = state.selectedTxIds.has(id);
   updateBulkDeleteBtn();
 }
 
-function updateBulkDeleteBtn(){
-  const n = selectedTxIds.size;
+export function updateBulkDeleteBtn(){
+  const n = state.selectedTxIds.size;
   const delBtn = document.getElementById('bulk-toolbar-delete');
   const cnt = document.getElementById('bulk-toolbar-count');
   if(delBtn) delBtn.disabled = n===0;
   if(cnt) cnt.textContent = n+' selected';
 }
 
-async function bulkDeleteTx(){
-  if(!selectedTxIds.size) return;
-  if(!await showConfirm('Delete '+selectedTxIds.size+' selected transaction'+(selectedTxIds.size!==1?'s':'')+' with balance reversal? This cannot be undone.')) return;
-  for(const id of selectedTxIds){
-    const t = cfTransactions.find(x=>x.id===id);
+export async function bulkDeleteTx(){
+  if(!state.selectedTxIds.size) return;
+  if(!await showConfirm('Delete '+state.selectedTxIds.size+' selected transaction'+(state.selectedTxIds.size!==1?'s':'')+' with balance reversal? This cannot be undone.')) return;
+  for(const id of state.selectedTxIds){
+    const t = state.cfTransactions.find(x=>x.id===id);
     if(t){
       const reverseType = t.type==='expense'?'income':t.type==='income'?'expense':t.type;
       await applyBalanceChange(reverseType, Number(t.amount), t.holding_id||null, t.holding_to_id||null);
       await api('cashflow_transactions?id=eq.'+id,{method:'DELETE'});
     }
   }
-  selectedTxIds.clear();
-  bulkSelectMode = false;
-  [cfTransactions, holdings] = await Promise.all([
+  state.selectedTxIds.clear();
+  state.bulkSelectMode = false;
+  [state.cfTransactions, state.holdings] = await Promise.all([
     api('cashflow_transactions?order=date.desc'),
     api('holdings?order=sort_order.asc,created_at.asc').catch(()=>api('holdings?order=created_at.asc'))
   ]);
@@ -626,7 +647,7 @@ async function bulkDeleteTx(){
 // ─────────────────────────────────────────
 let _tdSrcType=null, _tdClone=null, _tdOrigEl=null, _tdOffY=0, _tdOffX=0;
 
-function initTouchDnD(){
+export function initTouchDnD(){
   if(window.innerWidth>768) return;
   document.querySelectorAll('.cat-block[draggable="true"]').forEach(block=>{
     // Attach to the whole block for easier touch target
@@ -706,7 +727,7 @@ async function _tdEnd(e){
     b.style.opacity=''; b.style.transition='';
   });
   if(targetType&&targetType!==_tdSrcType){
-    dragSrcType=_tdSrcType;
+    state.dragSrcType=_tdSrcType;
     await onHoldingDrop(null,targetType);
   }
   _tdSrcType=null; _tdOrigEl=null;
@@ -715,53 +736,105 @@ async function _tdEnd(e){
 // ─────────────────────────────────────────
 // DRAG & DROP (HOLDINGS REORDER)
 // ─────────────────────────────────────────
-function onHoldingDragStart(e, type){
-  dragSrcType = type;
+export function onHoldingDragStart(e, type){
+  state.dragSrcType = type;
   e.dataTransfer.effectAllowed = 'move';
   const block = e.currentTarget.closest('.cat-block');
   setTimeout(()=>{ if(block) block.classList.add('drag-source'); }, 0);
 }
 
-function onHoldingDragOver(e){
+export function onHoldingDragOver(e){
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   e.currentTarget.classList.add('drag-over');
 }
 
-function onHoldingDragLeave(e){
+export function onHoldingDragLeave(e){
   e.currentTarget.classList.remove('drag-over');
 }
 
-async function onHoldingDrop(e, targetType){
+export async function onHoldingDrop(e, targetType){
   if(e&&e.preventDefault) e.preventDefault();
   // Remove all drag state (works for both mouse and touch)
   document.querySelectorAll('.cat-block').forEach(b=>{b.classList.remove('drag-over');b.classList.remove('drag-source');b.style.opacity='';});
-  if(!dragSrcType || dragSrcType === targetType){ dragSrcType=null; return; }
+  if(!state.dragSrcType || state.dragSrcType === targetType){ state.dragSrcType=null; return; }
   const container = document.getElementById('h-categories');
-  if(!container){ dragSrcType=null; return; }
+  if(!container){ state.dragSrcType=null; return; }
   const blocks = [...container.querySelectorAll('.cat-block')];
-  const srcBlock = blocks.find(b=>b.dataset.type===dragSrcType);
+  const srcBlock = blocks.find(b=>b.dataset.type===state.dragSrcType);
   const tgtBlock = blocks.find(b=>b.dataset.type===targetType);
-  if(!srcBlock||!tgtBlock){ dragSrcType=null; return; }
+  if(!srcBlock||!tgtBlock){ state.dragSrcType=null; return; }
   const srcIdx = blocks.indexOf(srcBlock);
   const tgtIdx = blocks.indexOf(tgtBlock);
   if(srcIdx < tgtIdx) tgtBlock.after(srcBlock);
   else tgtBlock.before(srcBlock);
   const newOrder = [...container.querySelectorAll('.cat-block')].map(b=>b.dataset.type);
-  const updates = holdings.map(h=>{
+  const updates = state.holdings.map(h=>{
     const typeIdx = newOrder.indexOf(h.type);
-    const withinType = holdings.filter(x=>x.type===h.type).indexOf(h);
+    const withinType = state.holdings.filter(x=>x.type===h.type).indexOf(h);
     return {id:h.id, sort_order: typeIdx*1000 + withinType};
   });
   await Promise.all(updates.map(u=>api('holdings?id=eq.'+u.id,{method:'PATCH',body:JSON.stringify({sort_order:u.sort_order})})));
-  holdings = await api('holdings?order=sort_order.asc,created_at.asc').catch(()=>api('holdings?order=created_at.asc'));
-  dragSrcType = null;
+  state.holdings = await api('holdings?order=sort_order.asc,created_at.asc').catch(()=>api('holdings?order=created_at.asc'));
+  state.dragSrcType = null;
   toast('Order saved');
 }
 
 document.addEventListener('dragend', ()=>{
   document.querySelectorAll('.cat-block').forEach(b=>{b.classList.remove('drag-source');b.style.opacity='';});
-  dragSrcType=null;
+  state.dragSrcType=null;
 });
 
 // ─────────────────────────────────────────
+
+// ─────────────────────────────────────────────
+// Legacy inline-HTML compatibility
+// ─────────────────────────────────────────────
+exposeLegacyFunctions({
+  showSettingsMain,
+  showSettingsSection,
+  recurCalPrev,
+  recurCalNext,
+  getRecurrenceDaysInMonth,
+  renderRecurCalendar,
+  renderSettings,
+
+  buildIconGrid,
+  selectIcon,
+  updateIconPreview,
+
+  openCatDetailModal,
+  deleteCatFromDetail,
+  openCategoryModal,
+  updateCatParentUI,
+  openCatParentPicker,
+  saveCat,
+  deleteCat,
+
+  toggleRecurActive,
+  deleteRecur,
+
+  showMobileRptInsights,
+  switchMobileAnalytics,
+  showCalDayDetail,
+
+  toggleCfSearch,
+  closeCfSearch,
+  onCfSearch,
+
+  setBulkSelectMode,
+  toggleBulkSelect,
+  txTouchStart,
+  txTouchMove,
+  txTouchEnd,
+  toggleTxSelect,
+  updateBulkDeleteBtn,
+  bulkDeleteTx,
+
+  initTouchDnD,
+
+  onHoldingDragStart,
+  onHoldingDragOver,
+  onHoldingDragLeave,
+  onHoldingDrop
+});

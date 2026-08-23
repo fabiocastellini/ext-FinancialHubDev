@@ -1,13 +1,32 @@
-function renderHoldings(){
+import { H_TYPE_OPTIONS, TYPE_LABELS, TYPE_ICONS, APP_ENV } from '../config.js';
+
+import { exposeLegacyFunctions } from '../utils/legacy.js';
+import { loadAll } from '../app.js';
+
+import {fmt, fmtN, fmtPct} from '../utils/date.js';
+import { getVal, getCost, getGain, getGainPct, cleanCryptoName, cleanCryptoTicker} from '../utils/calculations.js';
+
+import { initTouchDnD }  from '../settings.js';
+
+import { api } from '../api.js';
+import { state } from '../state.js';
+
+import { renderCashflow } from '../features/cashflow.js'
+import { renderOverview } from '../features/overview.js'
+
+import { openModal, closeModal } from '../components/modal.js';
+import { openSelectPicker, setTriggerIcon } from '../components/select-picker.js';
+
+export function renderHoldings(){
   const emptyState = document.getElementById('h-empty-state');
   const container  = document.getElementById('h-categories');
   const subtitle   = document.getElementById('h-subtitle');
-  if(!holdings.length){ emptyState.style.display=''; container.innerHTML=''; subtitle.textContent='No holdings yet'; closeCategoryDetail(); return; }
+  if(!state.holdings.length){ emptyState.style.display=''; container.innerHTML=''; subtitle.textContent='No holdings yet'; closeCategoryDetail(); return; }
   emptyState.style.display='none';
 
   // Update subtitle with price freshness
-  const investmentHoldings = holdings.filter(h=>!['bank','cash','dividend'].includes(h.type));
-  const priceCount = investmentHoldings.filter(h=>prices[h.ticker]).length;
+  const investmentHoldings = state.holdings.filter(h=>!['bank','cash','dividend'].includes(h.type));
+  const priceCount = investmentHoldings.filter(h=>state.prices[h.ticker]).length;
   const lastUpdated = document.getElementById('refresh-info').textContent;
   if(investmentHoldings.length===0){
     subtitle.textContent = 'Balances up to date';
@@ -21,8 +40,8 @@ function renderHoldings(){
 
   // Group by type
   const byType = {};
-  holdings.forEach(h=>{ if(!byType[h.type]) byType[h.type]=[]; byType[h.type].push(h); });
-  const totalPortfolio = holdings.reduce((s,h)=>s+getVal(h),0)||1;
+  state.holdings.forEach(h=>{ if(!byType[h.type]) byType[h.type]=[]; byType[h.type].push(h); });
+  const totalPortfolio = state.holdings.reduce((s,h)=>s+getVal(h),0)||1;
   const typeColorMap = {bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',dividend:'#60a8f5',etf:'#10b981',stock:'#6366f1'};
 
   // Sort categories alphabetically
@@ -43,7 +62,7 @@ function renderHoldings(){
     const catGainPct = catCost > 0 ? catGain/catCost*100 : 0;
     const catHasPrices = isSimple ? false : items.some(h=>{
       const t = h.type==='crypto' ? cleanCryptoTicker(h.ticker) : h.ticker;
-      return prices[t] != null || prices[h.ticker] != null;
+      return state.prices[t] != null || state.prices[h.ticker] != null;
     });
 
     return `<div class="cat-block holding-box holding-box-clickable type-${type}" data-type="${type}"
@@ -71,7 +90,7 @@ function renderHoldings(){
 
 let currentCategoryType = null;
 
-function openCategoryDetail(type){
+export function openCategoryDetail(type){
   currentCategoryType = type;
   document.getElementById('h-categories').style.display = 'none';
   document.getElementById('h-empty-state').style.display = 'none';
@@ -82,7 +101,7 @@ function openCategoryDetail(type){
   renderCategoryDetail(type);
 }
 
-function closeCategoryDetail(){
+export function closeCategoryDetail(){
   currentCategoryType = null;
   const detail = document.getElementById('h-category-detail');
   if(detail){ detail.style.display='none'; detail.innerHTML=''; }
@@ -92,25 +111,25 @@ function closeCategoryDetail(){
   if(mainActions) mainActions.style.display = '';
 }
 
-function refreshHoldingsViews(){
+export function refreshHoldingsViews(){
   renderHoldings();
   if(currentCategoryType){
-    const stillHasHoldings = holdings.some(h=>h.type===currentCategoryType);
+    const stillHasHoldings = state.holdings.some(h=>h.type===currentCategoryType);
     if(stillHasHoldings) renderCategoryDetail(currentCategoryType);
     else closeCategoryDetail();
   }
 }
 
-function renderCategoryDetail(type){
+export function renderCategoryDetail(type){
   const container = document.getElementById('h-category-detail');
   if(!container) return;
-  const items = holdings.filter(h=>h.type===type);
+  const items = state.holdings.filter(h=>h.type===type);
   if(!items.length){ closeCategoryDetail(); return; }
   const typeColorMap = {bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',dividend:'#60a8f5',etf:'#10b981',stock:'#6366f1'};
   const color = typeColorMap[type]||'#888';
   const icon = TYPE_ICONS[type]||'ti-wallet';
   const isSimple = type==='bank'||type==='cash'||type==='dividend';
-  const totalPortfolio = holdings.reduce((s,h)=>s+getVal(h),0)||1;
+  const totalPortfolio = state.holdings.reduce((s,h)=>s+getVal(h),0)||1;
   const catTotal = items.reduce((s,h)=>s+getVal(h),0);
   const catPct = (catTotal/totalPortfolio*100).toFixed(1);
   const catCost = isSimple ? 0 : items.reduce((s,h)=>s+getCost(h),0);
@@ -118,7 +137,7 @@ function renderCategoryDetail(type){
   const catGainPct = catCost > 0 ? catGain/catCost*100 : 0;
   const catHasPrices = isSimple ? false : items.some(h=>{
     const t = h.type==='crypto' ? cleanCryptoTicker(h.ticker) : h.ticker;
-    return prices[t] != null || prices[h.ticker] != null;
+    return state.prices[t] != null || state.prices[h.ticker] != null;
   });
 
   const rows = items.map(h => {
@@ -127,7 +146,7 @@ function renderCategoryDetail(type){
     const dispName   = isCrypto ? cleanCryptoName(h.name||h.ticker) : (h.name||h.ticker);
     if(isCrypto && COINGECKO_IDS[cleanCryptoTicker(h.ticker)] && !COINGECKO_IDS[dispTicker])
       COINGECKO_IDS[dispTicker] = COINGECKO_IDS[cleanCryptoTicker(h.ticker)];
-    const price    = prices[dispTicker] ?? prices[h.ticker];
+    const price    = state.prices[dispTicker] ?? state.prices[h.ticker];
     const gain     = getGain(h), gainPct = getGainPct(h);
     const gainClass = gain>=0?'pos-bg':'neg-bg';
     const hasPrice  = price != null;
@@ -196,7 +215,7 @@ let tickerSearchTimeout = null;
 
 let hCostMode = 'unit'; // 'unit' = average cost per unit, 'total' = total amount paid
 
-function onHoldingTypeChange(type){
+export function onHoldingTypeChange(type){
   const isSimple = type==='bank' || type==='cash' || type==='dividend';
   document.getElementById('h-name-wrap').style.display  = (type==='bank'||type==='cash') ? '' : 'none';
   document.getElementById('h-div-stock-wrap').style.display = type==='dividend' ? '' : 'none';
@@ -215,9 +234,9 @@ function onHoldingTypeChange(type){
   clearTickerSelection();
 }
 
-function openHDivStockPicker(){
+export function openHDivStockPicker(){
   const current = document.getElementById('h-div-stock').value;
-  const stockHoldings = holdings.filter(h=>h.type==='stock');
+  const stockHoldings = state.holdings.filter(h=>h.type==='stock');
   const options = stockHoldings.map(h=>({value:h.id, label:h.name||h.ticker, icon:'ti-chart-candle', color:'#6366f1'}));
   if(!options.length){
     showAlert("You don't have any stock holdings yet — add one first, then you can log dividends for it.");
@@ -231,12 +250,12 @@ function openHDivStockPicker(){
   });
 }
 
-function toggleCostMode(){
+export function toggleCostMode(){
   hCostMode = hCostMode==='unit' ? 'total' : 'unit';
   updateCostModeUI();
 }
 
-function updateCostModeUI(){
+export function updateCostModeUI(){
   const label  = document.getElementById('h-cost-label');
   const toggle = document.getElementById('h-cost-mode-toggle');
   const hint   = document.getElementById('h-cost-hint');
@@ -265,14 +284,14 @@ function updateCostModeUI(){
   }
 }
 
-function clearTickerSelection(){
+export function clearTickerSelection(){
   document.getElementById('h-ticker').value = '';
   document.getElementById('h-search').value = '';
   document.getElementById('h-selected-ticker').style.display = 'none';
   document.getElementById('h-search-results').style.display  = 'none';
 }
 
-function selectTicker(symbol, name, exchDisp){
+export function selectTicker(symbol, name, exchDisp){
   document.getElementById('h-ticker').value = symbol;
   document.getElementById('h-search').value = '';
   document.getElementById('h-selected-label').textContent = `${symbol} — ${name}${exchDisp ? ' ('+exchDisp+')' : ''}`;
@@ -280,7 +299,7 @@ function selectTicker(symbol, name, exchDisp){
   document.getElementById('h-search-results').style.display  = 'none';
 }
 
-async function searchCoinGecko(q){
+export async function searchCoinGecko(q){
   // Search CoinGecko coins list
   try{
     const r = await fetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(q)}`,{signal:AbortSignal.timeout(6000)});
@@ -295,7 +314,7 @@ async function searchCoinGecko(q){
   }catch{ return null; }
 }
 
-async function searchYahoo(q){
+export async function searchYahoo(q){
   // On prod (Cloudflare Workers) we have our own same-origin API route — no CORS proxy needed at all.
   if(APP_ENV==='prod'){
     try{
@@ -344,7 +363,7 @@ async function searchYahoo(q){
   }
 }
 
-async function onTickerSearch(q){
+export async function onTickerSearch(q){
   const box  = document.getElementById('h-search-results');
   const type = document.getElementById('h-type').value;
   clearTimeout(tickerSearchTimeout);
@@ -395,14 +414,14 @@ async function onTickerSearch(q){
 }
 
 // Fallback for when the search API is unavailable/flaky: let the user type a ticker directly.
-function manualTickerLink(q){
+export function manualTickerLink(q){
   const safeQ = (q||'').replace(/'/g,"\\'");
   return `<div onclick="selectManualTicker('${safeQ}')" style="justify-content:center;color:var(--accent);font-weight:600">
     <i class="ti ti-edit" style="font-size:12px;margin-right:4px"></i> Can't find it? Enter ticker manually
   </div>`;
 }
 
-async function selectManualTicker(prefill){
+export async function selectManualTicker(prefill){
   const ticker = await showInputDialog('Enter ticker symbol', 'Type the exact ticker (e.g. AAPL, VWCE.MI):', prefill||'');
   if(ticker===null || !ticker.trim()) return;
   const clean = ticker.trim().toUpperCase();
@@ -410,7 +429,7 @@ async function selectManualTicker(prefill){
 }
 
 // For crypto: store cgId so CoinGecko price fetch knows which coin to call
-function selectCryptoTicker(symbol, name, cgId){
+export function selectCryptoTicker(symbol, name, cgId){
   // Strip fiat suffix from symbol (BTC-EUR → BTC) and name (Bitcoin EUR → Bitcoin)
   const cleanSymbol = symbol.replace(/[-/](EUR|USD|USDT|USDC|GBP)$/i, '').toUpperCase();
   const cleanName   = name.replace(/\s+(EUR|USD|USDT|USDC|GBP)$/i, '').trim();
@@ -418,7 +437,7 @@ function selectCryptoTicker(symbol, name, cgId){
   selectTicker(cleanSymbol, cleanName, 'Crypto');
 }
 
-async function saveHolding(){
+export async function saveHolding(){
   const type=document.getElementById('h-type').value;
   const isSimple = type==='bank' || type==='cash' || type==='dividend';
   const costInput=parseFloat(document.getElementById('h-cost').value)||0;
@@ -427,13 +446,13 @@ async function saveHolding(){
     if(type==='dividend'){
       const stockId = document.getElementById('h-div-stock').value;
       if(!stockId){ await showAlert('Please select a stock.'); return; }
-      const stock = holdings.find(h=>h.id===stockId);
+      const stock = state.holdings.find(h=>h.id===stockId);
       if(!stock){ await showAlert('Selected stock not found — please pick it again.'); return; }
       if(costInput<=0){ await showAlert('Please enter the dividend amount received.'); return; }
       const stockName = stock.name || stock.ticker;
       const name   = `${stockName} - Dividends`;
       const ticker = `${stock.ticker}_DIV`.toUpperCase();
-      const existing = holdings.find(h=>h.ticker===ticker && h.type==='dividend');
+      const existing = state.holdings.find(h=>h.ticker===ticker && h.type==='dividend');
       if(existing){
         // Accumulate: each dividend logged adds to the running total for this stock, never overwrites it.
         const newBalance = (existing.avg_cost||0) + costInput;
@@ -449,7 +468,7 @@ async function saveHolding(){
     if(costInput<=0){ await showAlert('Please enter the current balance.'); return; }
     const avg_cost = costInput;
     const ticker = name.toUpperCase().replace(/\s+/g,'_').slice(0,30);
-    const existing = holdings.find(h=>h.ticker===ticker);
+    const existing = state.holdings.find(h=>h.ticker===ticker);
     if(existing){
       await api(`holdings?id=eq.${existing.id}`,{method:'PATCH',body:JSON.stringify({avg_cost, qty:1, name})});
     } else {
@@ -467,9 +486,9 @@ async function saveHolding(){
     // If the person entered a TOTAL cost, convert it to a per-unit cost before storing —
     // avg_cost is always stored per-unit in the database.
     const avg_cost = hCostMode==='total' ? costInput/qty : costInput;
-    const existing=holdings.find(h=>h.ticker===ticker);
+    const existing=state.holdings.find(h=>h.ticker===ticker);
     // Duplicate check: warn if ticker already exists as a different type
-    const existingDiff=holdings.find(h=>h.ticker===ticker&&h.type!==type);
+    const existingDiff=state.holdings.find(h=>h.ticker===ticker&&h.type!==type);
     if(existingDiff&&!existing){ if(!await showConfirm(`Ticker ${ticker} already exists as ${TYPE_LABELS[existingDiff.type]}. Add anyway?`)) return; }
     if(existing){
       const totalCost=existing.qty*existing.avg_cost+qty*avg_cost;
@@ -482,7 +501,7 @@ async function saveHolding(){
   closeModal('modal-holding'); await loadAll(); toast('Holding saved ✓'); refreshPrices(true, true);
 }
 
-async function renameHolding(id, currentName){
+export async function renameHolding(id, currentName){
   // Use a custom inline modal for text input
   const newName = await showInputDialog('Rename holding', 'Enter new name:', currentName);
   if(newName===null||!newName.trim()) return;
@@ -490,7 +509,7 @@ async function renameHolding(id, currentName){
   await loadAll(); toast('Holding renamed ✓');
 }
 
-function showInputDialog(title, label, defaultVal=''){
+export function showInputDialog(title, label, defaultVal=''){
   return new Promise(resolve=>{
     // Temporarily add input to dialog
     document.getElementById('dialog-title').textContent = title;
@@ -513,7 +532,7 @@ function showInputDialog(title, label, defaultVal=''){
   });
 }
 
-async function editBalance(id, name, currentBalance){
+export async function editBalance(id, name, currentBalance){
   const input = await showInputDialog('Edit balance', name, currentBalance.toFixed(2));
   if(input===null||input.trim()==='') return;
   const newBalance = parseFloat(input.replace(',','.'));
@@ -523,14 +542,14 @@ async function editBalance(id, name, currentBalance){
 }
 
 
-async function deleteHolding(id){
-  const linkedTxCount = cfTransactions.filter(t=>t.holding_id===id||t.holding_to_id===id).length;
+export async function deleteHolding(id){
+  const linkedTxCount = state.cfTransactions.filter(t=>t.holding_id===id||t.holding_to_id===id).length;
   const msg = linkedTxCount>0
     ? `This holding has ${linkedTxCount} linked transaction${linkedTxCount>1?'s':''}.\n\nDeleting it will also delete all those transactions and reverse their balance changes.\n\nProceed?`
     : 'Remove this holding?';
   if(!await showConfirm(msg,'Delete holding', true)) return;
   // Cascade: reverse balance + delete all linked transactions first
-  const linkedTxs = cfTransactions.filter(t=>t.holding_id===id||t.holding_to_id===id);
+  const linkedTxs = state.cfTransactions.filter(t=>t.holding_id===id||t.holding_to_id===id);
   for(const t of linkedTxs){
     const reverseType = t.type==='expense'?'income':t.type==='income'?'expense':t.type;
     await applyBalanceChange(reverseType, Number(t.amount), t.holding_id||null, t.holding_to_id||null);
@@ -538,22 +557,22 @@ async function deleteHolding(id){
   }
   await api(`holdings?id=eq.${id}`,{method:'DELETE'});
   await loadAll();
-  cfTransactions = await api('cashflow_transactions?order=date.desc');
+  state.cfTransactions = await api('cashflow_transactions?order=date.desc');
   renderCashflow();
   toast('Holding and transactions deleted');
 }
 
-async function deleteCategoryHoldings(type){
-  const catHoldings = holdings.filter(h=>h.type===type);
+export async function deleteCategoryHoldings(type){
+  const catHoldings = state.holdings.filter(h=>h.type===type);
   if(!catHoldings.length) return;
-  const totalTxCount = cfTransactions.filter(t=>catHoldings.some(h=>h.id===t.holding_id||h.id===t.holding_to_id)).length;
+  const totalTxCount = state.cfTransactions.filter(t=>catHoldings.some(h=>h.id===t.holding_id||h.id===t.holding_to_id)).length;
   const msg = `Delete all ${TYPE_LABELS[type]||type} holdings (${catHoldings.length})?`
     + (totalTxCount>0 ? `\n\nThis will also delete ${totalTxCount} linked transaction${totalTxCount>1?'s':''} and reverse their balance changes.` : '')
     + '\n\nThis cannot be undone.';
   if(!await showConfirm(msg, 'Delete category', true)) return;
   // Cascade delete: transactions first, then holdings
   for(const h of catHoldings){
-    const linkedTxs = cfTransactions.filter(t=>t.holding_id===h.id||t.holding_to_id===h.id);
+    const linkedTxs = state.cfTransactions.filter(t=>t.holding_id===h.id||t.holding_to_id===h.id);
     for(const t of linkedTxs){
       const reverseType = t.type==='expense'?'income':t.type==='income'?'expense':t.type;
       await applyBalanceChange(reverseType, Number(t.amount), t.holding_id||null, t.holding_to_id||null);
@@ -562,7 +581,7 @@ async function deleteCategoryHoldings(type){
     await api(`holdings?id=eq.${h.id}`,{method:'DELETE'});
   }
   await loadAll();
-  cfTransactions = await api('cashflow_transactions?order=date.desc');
+  state.cfTransactions = await api('cashflow_transactions?order=date.desc');
   renderCashflow();
   toast(`${TYPE_LABELS[type]||type} holdings deleted`);
 }
@@ -570,8 +589,8 @@ async function deleteCategoryHoldings(type){
 // ── TRANSACTIONS ──
 const TX_COLORS={buy:'var(--green)',sell:'var(--red)',dividend:'var(--blue)',transfer:'var(--text2)'};
 
-function renderTx(){
-  const filtered=txFilter==='all'?transactions:transactions.filter(t=>t.type===txFilter);
+export function renderTx(){
+  const filtered=state.transactionFilter==='all'?state.transactions:state.transactions.filter(t=>t.type===state.transactionFilter);
   const empty=document.getElementById('tx-empty'), table=document.getElementById('tx-table'), tbody=document.getElementById('tx-tbody');
   if(!empty||!table||!tbody) return; // old tx page removed
   if(!filtered.length){empty.style.display='';table.style.display='none';return;}
@@ -587,7 +606,7 @@ function renderTx(){
   </tr>`).join('');
 }
 
-async function saveTx(){
+export async function saveTx(){
   const ticker=document.getElementById('tx-ticker').value.trim().toUpperCase();
   if(!ticker){await showAlert('Please enter a ticker.');return;}
   const row={
@@ -603,13 +622,13 @@ async function saveTx(){
   closeModal('modal-tx'); await loadAll(); toast('Transaction saved ✓');
 }
 
-async function deleteTx(id){
+export async function deleteTx(id){
   if(!await showConfirm('Remove this transaction?')) return;
   await api(`transactions?id=eq.${id}`,{method:'DELETE'}); await loadAll(); toast('Transaction removed');
 }
 
-function setFilter(f,btn){
-  txFilter=f;
+export function setFilter(f,btn){
+  state.transactionFilter=f;
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active'); renderTx();
 }
@@ -635,7 +654,7 @@ const COINGECKO_IDS = {
 // Resolve ticker → CoinGecko ID.
 // Ticker may be the raw symbol (e.g. KAS) or whatever Yahoo would use.
 // selectCryptoTicker() always registers the correct cgId at selection time.
-function cgIdForTicker(ticker){
+export function cgIdForTicker(ticker){
   // Direct match first (set at search-select time or from built-in map)
   if(COINGECKO_IDS[ticker]) return COINGECKO_IDS[ticker];
   // Strip common suffixes: BTC-EUR → BTC, KASUSDT → KAS
@@ -645,7 +664,7 @@ function cgIdForTicker(ticker){
 }
 
 // Fetch prices for ALL crypto holdings in one CoinGecko batch call
-async function fetchAllCryptoPrices(tickers){
+export async function fetchAllCryptoPrices(tickers){
   const cgIds = [...new Set(tickers.map(t=>cgIdForTicker(t)).filter(Boolean))];
   if(!cgIds.length) return {};
   try{
@@ -668,7 +687,7 @@ async function fetchAllCryptoPrices(tickers){
 
 // Yahoo Finance via CORS proxy for stocks/ETFs/bonds
 // Low-level: fetch the raw price + currency for any Yahoo ticker (a stock, or an FX pair like 'EURUSD=X')
-async function fetchYahooRaw(ticker){
+export async function fetchYahooRaw(ticker){
   if(APP_ENV==='prod'){
     try{
       const r = await fetch(`/api/yh-price?ticker=${encodeURIComponent(ticker)}`, {signal: AbortSignal.timeout(5000)});
@@ -714,7 +733,7 @@ async function fetchYahooRaw(ticker){
 // Cache of EUR conversion rates for the current refresh cycle — several holdings often
 // share the same currency (e.g. multiple USD stocks), so we only fetch each rate once.
 let fxRateCache = {};
-async function getEurConversionRate(currency){
+export async function getEurConversionRate(currency){
   if(!currency || currency==='EUR') return 1;
   if(fxRateCache[currency] != null) return fxRateCache[currency];
   const raw = await fetchYahooRaw(`EUR${currency}=X`);
@@ -723,7 +742,7 @@ async function getEurConversionRate(currency){
 }
 
 // Public: fetch a stock/ETF/bond price, converted to EUR if it's quoted in another currency
-async function fetchYahooPrice(ticker){
+export async function fetchYahooPrice(ticker){
   const raw = await fetchYahooRaw(ticker);
   if(!raw){
     console.warn(`Yahoo: could not fetch price for ${ticker}`);
@@ -741,8 +760,8 @@ async function fetchYahooPrice(ticker){
 const PRICE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 let lastPriceFetch = 0;
 
-async function refreshPrices(force=false, silent=false){
-  const investable = holdings.filter(h=>!['bank','cash','dividend'].includes(h.type));
+export async function refreshPrices(force=false, silent=false){
+  const investable = state.holdings.filter(h=>!['bank','cash','dividend'].includes(h.type));
   if(!investable.length){ renderHoldings(); return; }
 
   // Use cached prices if fresh enough and not forced
@@ -766,10 +785,10 @@ async function refreshPrices(force=false, silent=false){
     fetchAllCryptoPrices(cryptoTickers),
     Promise.all(nonCryptoTickers.map(async t=>{
       const p = await fetchYahooPrice(t);
-      if(p != null) prices[t] = p;
+      if(p != null) state.prices[t] = p;
     }))
   ]);
-  Object.assign(prices, cryptoPrices);
+  Object.assign(state.prices, cryptoPrices);
   lastPriceFetch = Date.now();
 
   const timeStr = new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
@@ -778,8 +797,8 @@ async function refreshPrices(force=false, silent=false){
   renderHoldings(); renderOverview(); renderAllocation();
 
   const allTickers = [...cryptoTickers, ...nonCryptoTickers];
-  const fetched = allTickers.filter(t=>prices[t]!=null).length;
-  const failed  = allTickers.filter(t=>prices[t]==null).length;
+  const fetched = allTickers.filter(t=>state.prices[t]!=null).length;
+  const failed  = allTickers.filter(t=>state.prices[t]==null).length;
   if(!silent){
     if(fetched===0) toast('⚠️ Could not load any prices');
     else if(failed>0) toast(`Prices updated — ${failed} ticker(s) unavailable`);
@@ -787,4 +806,71 @@ async function refreshPrices(force=false, silent=false){
   }
 }
 
-// ── OVERVIEW ──
+export function openAddHoldingModal(presetType) {
+  openModal('modal-holding');
+  const typeSelect = document.getElementById('h-type');
+  const typeWrap = typeSelect?.closest('.form-group');
+  const titleEl = document.querySelector('#modal-holding .modal-title');
+  if (presetType) {
+    typeSelect.value = presetType;
+    window.onHoldingTypeChange?.(presetType);
+    const opt = H_TYPE_OPTIONS.find(o => o.value === presetType);
+    document.getElementById('h-type-label').textContent = opt ? opt.label : 'Select asset type';
+    document.getElementById('h-type-trigger').classList.toggle('placeholder', !opt);
+    setTriggerIcon('h-type-icon', opt?.icon, opt?.color);
+    typeSelect.disabled = true;
+    if (typeWrap) typeWrap.style.display = 'none';
+    if (titleEl) titleEl.textContent = `Add ${TYPE_LABELS[presetType] || presetType}`;
+  } else {
+    typeSelect.value = 'bank';
+    const opt = H_TYPE_OPTIONS.find(o => o.value === 'bank');
+    document.getElementById('h-type-label').textContent = opt.label;
+    document.getElementById('h-type-trigger').classList.remove('placeholder');
+    setTriggerIcon('h-type-icon', opt.icon, opt.color);
+    typeSelect.disabled = false;
+    if (typeWrap) typeWrap.style.display = '';
+    if (titleEl) titleEl.textContent = 'Add holding';
+  }
+}
+
+export function openHTypePicker() {
+  const current = document.getElementById('h-type').value;
+  openSelectPicker('Select asset type', H_TYPE_OPTIONS, current, (val) => {
+    document.getElementById('h-type').value = val;
+    const opt = H_TYPE_OPTIONS.find(o => o.value === val);
+    document.getElementById('h-type-label').textContent = opt ? opt.label : 'Select asset type';
+    document.getElementById('h-type-trigger').classList.toggle('placeholder', !opt);
+    setTriggerIcon('h-type-icon', opt?.icon, opt?.color);
+    window.onHoldingTypeChange?.(val);
+  });
+}
+
+// ─────────────────────────────────────────────
+// Legacy inline-HTML compatibility
+// ─────────────────────────────────────────────
+exposeLegacyFunctions({
+  openCategoryDetail,
+  closeCategoryDetail,
+
+  openAddHoldingModal,
+  openHTypePicker,
+  onHoldingTypeChange,
+  openHDivStockPicker,
+  saveHolding,
+  renameHolding,
+  editBalance,
+  deleteHolding,
+  deleteCategoryHoldings,
+  refreshHoldingsViews,
+
+  onTickerSearch,
+  selectTicker,
+  selectCryptoTicker,
+  selectManualTicker,
+
+  deleteTx,
+  setFilter,
+  renderTx,
+
+  refreshPrices,
+});

@@ -1,13 +1,42 @@
-async function loadCashflow(){
-  [cfCategories,cfTransactions,cfRecurrences]=await Promise.all([
+import { state } from '../state.js';
+import { api } from '../api.js';
+import { exposeLegacyFunctions } from '../utils/legacy.js';
+import {fmt, fmtN, fmtPct, fmtShort, fmtDateTimeDDMMYYYY, fmtDateDDMMYYYY, isoToday} from '../utils/date.js';
+import { getVal, cleanCryptoName, cleanCryptoTicker } from '../utils/calculations.js';
+
+import { invAssetOptionsList } from '../features/investments.js';
+import { ensureExtraCategories } from '../features/insights.js';
+
+import { initTouchDnD }  from '../settings.js';
+import { CF_FREQ_OPTIONS, TYPE_LABELS, TYPE_ICONS } from '../config.js';
+import { openSelectPicker, setTriggerIcon, buildCategoryPickerOptions, accountOptionsList, catDisplayLabel } from '../components/select-picker.js';
+import { closeModal } from '../components/modal.js';
+import { refreshPrices } from '../data/holdings.js';
+
+// ─────────────────────────────────────────
+// CASHFLOW
+// ─────────────────────────────────────────
+const DEFAULT_CATEGORIES=[
+  {name:'Food & Dining',icon:'ti-tools-kitchen-2',color:'#f59e0b'},
+  {name:'Transport',icon:'ti-car',color:'#3b82f6'},
+  {name:'Bills & Utilities',icon:'ti-file-invoice',color:'#6366f1'},
+  {name:'Health',icon:'ti-heart-rate-monitor',color:'#ec4899'},
+  {name:'Entertainment',icon:'ti-device-tv',color:'#8b5cf6'},
+  {name:'Shopping',icon:'ti-shopping-bag',color:'#f97316'},
+  {name:'Salary',icon:'ti-briefcase',color:'#10b981'},
+  {name:'Investment',icon:'ti-trending-up',color:'#0ea5e9'},
+];
+
+export async function loadCashflow(){
+  [state.cfCategories, state.cfTransactions, state.cfRecurrences]=await Promise.all([
     api('cashflow_categories?order=name.asc'),
     api('cashflow_transactions?order=date.desc'),
     api('recurrences?order=next_due.asc'),
   ]);
-  if(!cfCategories.length){
-    for(const c of DEFAULT_CATS){
+  if(!state.cfCategories.length){
+    for(const c of DEFAULT_CATEGORIES){
       const r=await api('cashflow_categories',{method:'POST',body:JSON.stringify(c)});
-      if(Array.isArray(r)&&r[0]) cfCategories.push(r[0]);
+      if(Array.isArray(r)&&r[0]) state.cfCategories.push(r[0]);
     }
   }
   // Ensure extra categories from Excel exist
@@ -22,7 +51,7 @@ async function loadCashflow(){
 
 async function processRecurrences(){
   const now=new Date(); let anyCreated=false;
-  for(const r of cfRecurrences){
+  for(const r of state.cfRecurrences){
     if(!r.active) continue;
     let due=new Date(r.next_due);
     while(due<=now){
@@ -32,7 +61,7 @@ async function processRecurrences(){
     }
     await api(`recurrences?id=eq.${r.id}`,{method:'PATCH',body:JSON.stringify({next_due:due.toISOString(),last_run:now.toISOString()})});
   }
-  if(anyCreated){cfTransactions=await api('cashflow_transactions?order=date.desc');holdings=await api('holdings?order=created_at.asc');}
+  if(anyCreated){state.cfTransactions=await api('cashflow_transactions?order=date.desc');state.holdings=await api('holdings?order=created_at.asc');}
 }
 
 function advanceDue(date,freq){
@@ -44,12 +73,12 @@ function advanceDue(date,freq){
   return d;
 }
 
-async function applyBalanceChange(type,amount,fromId,toId){
-  holdings=await api('holdings?order=created_at.asc');
-  if(type==='expense'&&fromId){const h=holdings.find(x=>x.id===fromId);if(h)await api(`holdings?id=eq.${fromId}`,{method:'PATCH',body:JSON.stringify({avg_cost:Math.max(0,(h.avg_cost||0)-amount)})});}
-  else if(type==='income'&&fromId){const h=holdings.find(x=>x.id===fromId);if(h)await api(`holdings?id=eq.${fromId}`,{method:'PATCH',body:JSON.stringify({avg_cost:(h.avg_cost||0)+amount})});}
+export async function applyBalanceChange(type,amount,fromId,toId){
+  state.holdings=await api('holdings?order=created_at.asc');
+  if(type==='expense'&&fromId){const h=state.holdings.find(x=>x.id===fromId);if(h)await api(`holdings?id=eq.${fromId}`,{method:'PATCH',body:JSON.stringify({avg_cost:Math.max(0,(h.avg_cost||0)-amount)})});}
+  else if(type==='income'&&fromId){const h=state.holdings.find(x=>x.id===fromId);if(h)await api(`holdings?id=eq.${fromId}`,{method:'PATCH',body:JSON.stringify({avg_cost:(h.avg_cost||0)+amount})});}
   else if(type==='transfer'&&fromId&&toId){
-    const hf=holdings.find(x=>x.id===fromId),ht=holdings.find(x=>x.id===toId);
+    const hf=state.holdings.find(x=>x.id===fromId),ht=state.holdings.find(x=>x.id===toId);
     if(hf)await api(`holdings?id=eq.${fromId}`,{method:'PATCH',body:JSON.stringify({avg_cost:Math.max(0,(hf.avg_cost||0)-amount)})});
     if(ht)await api(`holdings?id=eq.${toId}`,{method:'PATCH',body:JSON.stringify({avg_cost:(ht.avg_cost||0)+amount})});
   }
@@ -58,7 +87,7 @@ async function applyBalanceChange(type,amount,fromId,toId){
 // Reverses whatever a transaction did to its holding(s) — used when editing or deleting.
 // Not just the opposite type: a transfer must swap fromId/toId to correctly walk the
 // money back, not repeat the same movement again.
-async function reverseBalanceChange(type,amount,fromId,toId){
+export async function reverseBalanceChange(type,amount,fromId,toId){
   if(type==='expense') await applyBalanceChange('income',amount,fromId,null);
   else if(type==='income') await applyBalanceChange('expense',amount,fromId,null);
   else if(type==='transfer') await applyBalanceChange('transfer',amount,toId,fromId);
@@ -77,27 +106,27 @@ function isOutcomeSide(t,hId){
 }
 function isTransferSide(t){ return t.type==='transfer'; }
 
-function renderCashflow(){
+export function renderCashflow(){
   const cfHeader=document.getElementById('cf-page-header'); if(cfHeader) cfHeader.style.display='';
   const cfSearchbar=document.getElementById('cf-searchbar'); if(cfSearchbar) cfSearchbar.style.display='';
-  if(!cfSearchQuery) closeCfSearch();
+  if(!state.cfSearchQuery) closeCfSearch();
   const container=document.getElementById('cf-accounts'); if(!container) return;
-  if(!holdings.length){container.innerHTML='<div class="card"><div class="empty"><i class="ti ti-wallet"></i><p>No holdings yet.</p></div></div>';return;}
+  if(!state.holdings.length){container.innerHTML='<div class="card"><div class="empty"><i class="ti ti-wallet"></i><p>No holdings yet.</p></div></div>';return;}
   const typeColorMap={bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',dividend:'#60a8f5',etf:'#10b981',stock:'#6366f1'};
   // Group by type
   const byType={};
-  holdings.forEach(h=>{if(!byType[h.type])byType[h.type]=[];byType[h.type].push(h);});
+  state.holdings.forEach(h=>{if(!byType[h.type])byType[h.type]=[];byType[h.type].push(h);});
   const sortedTypes=Object.keys(byType).sort((a,b)=>(TYPE_LABELS[a]||a).localeCompare(TYPE_LABELS[b]||b));
   container.innerHTML=sortedTypes.map(type=>{
     const typeHoldings=byType[type];
     const color=typeColorMap[type]||'#888';
     const icon=TYPE_ICONS[type]||'ti-wallet';
     const typeLabel=TYPE_LABELS[type]||type;
-    const typeTxCount=cfTransactions.filter(t=>typeHoldings.some(h=>t.holding_id===h.id||t.holding_to_id===h.id)).length;
+    const typeTxCount=state.cfTransactions.filter(t=>typeHoldings.some(h=>t.holding_id===h.id||t.holding_to_id===h.id)).length;
     const typeTotal=typeHoldings.reduce((s,h)=>s+getVal(h),0);
     const subGroups=typeHoldings.map(h=>{
       const dispName=h.type==='crypto'?cleanCryptoName(h.name||h.ticker):(h.name||h.ticker);
-      const hTxs=cfTransactions.filter(t=>t.holding_id===h.id||t.holding_to_id===h.id);
+      const hTxs=state.cfTransactions.filter(t=>t.holding_id===h.id||t.holding_to_id===h.id);
       const recent=hTxs.slice(0,5);
       return `<div style="border-top:1px solid var(--border)">
         <div style="padding:8px 1.25rem;background:var(--surface2);display:flex;justify-content:space-between;align-items:center">
@@ -105,12 +134,12 @@ function renderCashflow(){
           <span style="font-size:13px;font-weight:600">${fmt(getVal(h))}</span>
         </div>
         ${recent.length?recent.map(t=>cfTxRow(t,h)).join(''):'<div style="padding:10px 1.25rem;color:var(--text3);font-size:13px">No transactions yet</div>'}
-        <button class="cf-see-all" onclick="showAllTx('${h.id}')" style="border-top:1px solid var(--border)">See all transactions <i class="ti ti-chevron-right" style="font-size:11px;vertical-align:middle"></i></button>
+        <button class="cf-see-all" onclick="showAllTransactions('${h.id}')" style="border-top:1px solid var(--border)">See all transactions <i class="ti ti-chevron-right" style="font-size:11px;vertical-align:middle"></i></button>
       </div>`;
     }).join('');
-    const totalNW=holdings.reduce((s,h)=>s+getVal(h),0);
+    const totalNW=state.holdings.reduce((s,h)=>s+getVal(h),0);
     const typePct=totalNW>0?(typeTotal/totalNW*100).toFixed(1):'0';
-    const isOpen = cfOpenTypes.has(type);
+    const isOpen = state.cfOpenTypes.has(type);
     return `<div class="cf-account-block" data-type="${type}">
       <div class="cat-header${isOpen?' open':''}" onclick="toggleCfAccount(this)">
         <div class="cat-icon" style="background:${color}1a;color:${color}"><i class="ti ${icon}"></i></div>
@@ -130,8 +159,8 @@ function renderCashflow(){
   initTouchDnD();
 }
 
-function cfTxRow(t,h){
-  const cat=cfCategories.find(c=>c.id===t.category_id);
+export function cfTxRow(t,h){
+  const cat=state.cfCategories.find(c=>c.id===t.category_id);
   const txType=t.type||'expense';
   const hId=h?.id;
   let amtSign,amtColor,bgColor,icon;
@@ -159,10 +188,10 @@ function cfTxRow(t,h){
   const subLabel=[catLabel,typeLabel,recurLabel].filter(x=>x&&x.trim()).join(' · ');
   // Build row HTML without nested template literals
   const txId = t.id;
-  let rowHtml = '<div class="cf-tx-row' + (bulkSelectMode ? ' selectable' : '') + '" id="cf-row-' + txId + '"'
+  let rowHtml = '<div class="cf-tx-row' + (state.bulkSelectMode ? ' selectable' : '') + '" id="cf-row-' + txId + '"'
     + ' ontouchstart="txTouchStart(\'' + txId + '\')" ontouchend="txTouchEnd()" ontouchmove="txTouchMove()" ontouchcancel="txTouchEnd()"'
-    + (bulkSelectMode ? ' onclick="toggleTxSelect(\'' + txId + '\')" style="cursor:pointer"' : '') + '>';
-  if(bulkSelectMode){
+    + (state.bulkSelectMode ? ' onclick="toggleTxSelect(\'' + txId + '\')" style="cursor:pointer"' : '') + '>';
+  if(state.bulkSelectMode){
     rowHtml += '<input type="checkbox" class="cf-tx-checkbox" id="chk-' + txId + '" onclick="event.stopPropagation();toggleTxSelect(\'' + txId + '\')">';
   }
   rowHtml += `<div class="cf-tx-icon" style="background:${bgColor};color:${amtColor}"><i class="ti ${icon}"></i></div>
@@ -179,27 +208,24 @@ function cfTxRow(t,h){
   return rowHtml;
 }
 
-let cfOpenTypes=new Set();
-function toggleCfAccount(header){
+export function toggleCfAccount(header){
   const body=header.nextElementSibling;
   const open=body.classList.contains('open');
   body.classList.toggle('open',!open);
   header.classList.toggle('open',!open);
   header.setAttribute('aria-expanded',String(!open));
   const type=header.closest('.cf-account-block')?.dataset.type;
-  if(type){ if(!open) cfOpenTypes.add(type); else cfOpenTypes.delete(type); }
+  if(type){ if(!open) state.cfOpenTypes.add(type); else state.cfOpenTypes.delete(type); }
 }
 
-let allTxHoldingId=null, allTxFilter='all', allTxFrom='', allTxTo='', allTxDateFilterOpen=false, allTxSearchQuery='';
-
-function allTxDateSummary(){
+export function allTxDateSummary(){
   if(allTxFrom && allTxTo) return `${fmtDateDDMMYYYY(allTxFrom)} → ${fmtDateDDMMYYYY(allTxTo)}`;
   if(allTxFrom) return `From ${fmtDateDDMMYYYY(allTxFrom)}`;
   if(allTxTo) return `Until ${fmtDateDDMMYYYY(allTxTo)}`;
   return 'Date range';
 }
 
-function toggleAllTxDateFilter(open){
+export function toggleAllTxDateFilter(open){
   allTxDateFilterOpen = (open!==undefined) ? open : !allTxDateFilterOpen;
   renderAllTxDateFilter();
 }
@@ -268,17 +294,17 @@ function onAllTxSearch(q){
   renderAllTxBody();
 }
 
-function setAllTxFilter(f,btn){
+export function setAllTxFilter(f,btn){
   allTxFilter=f;
   document.querySelectorAll('.alltx-filter').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   renderAllTxBody();
 }
 
-function renderAllTxBody(){
-  const h=holdings.find(x=>x.id===allTxHoldingId);
+export function renderAllTxBody(){
+  const h=state.holdings.find(x=>x.id===allTxHoldingId);
   const hId=allTxHoldingId;
-  let hTxs=cfTransactions.filter(t=>t.holding_id===hId||t.holding_to_id===hId);
+  let hTxs=state.cfTransactions.filter(t=>t.holding_id===hId||t.holding_to_id===hId);
   if(allTxFilter==='income')   hTxs=hTxs.filter(t=>isIncomeSide(t,hId));
   if(allTxFilter==='outcome')  hTxs=hTxs.filter(t=>isOutcomeSide(t,hId));
   if(allTxFilter==='transfer') hTxs=hTxs.filter(t=>isTransferSide(t));
@@ -286,7 +312,7 @@ function renderAllTxBody(){
   if(allTxTo)   hTxs=hTxs.filter(t=>t.date<=allTxTo);
   if(allTxSearchQuery) hTxs=hTxs.filter(t=>{
     const desc=(t.description||'').toLowerCase();
-    const cat=cfCategories.find(c=>c.id===t.category_id);
+    const cat=state.cfCategories.find(c=>c.id===t.category_id);
     const catName=(cat?.name||'').toLowerCase();
     return desc.includes(allTxSearchQuery)||catName.includes(allTxSearchQuery);
   });
@@ -306,10 +332,10 @@ function renderAllTxBody(){
     :'<div class="empty"><i class="ti ti-list"></i><p>No transactions</p></div>';
 }
 
-function renderAllTx(){
+export function renderAllTx(){
   const cfHeader=document.getElementById('cf-page-header'); if(cfHeader) cfHeader.style.display='none';
   const cfSearchbar=document.getElementById('cf-searchbar'); if(cfSearchbar) cfSearchbar.style.display='none';
-  const h=holdings.find(x=>x.id===allTxHoldingId);
+  const h=state.holdings.find(x=>x.id===allTxHoldingId);
   const dispName=h?(h.type==='crypto'?cleanCryptoName(h.name||h.ticker):(h.name||h.ticker)):'Account';
   const container=document.getElementById('cf-accounts');
   const header=document.createElement('div');
@@ -347,13 +373,13 @@ function renderAllTx(){
   renderAllTxBody();
 }
 
-function showAllTx(holdingId){
+export function showAllTransactions(holdingId){
   allTxHoldingId=holdingId; allTxFilter='all'; allTxFrom=''; allTxTo=''; allTxDateFilterOpen=false; allTxSearchQuery='';
   renderAllTx();
 }
 
-function showCfForm(){
-  if(!holdings.length){
+export function showCfForm(){
+  if(!state.holdings.length){
     toast('Add at least one holding before logging a transaction');
     return;
   }
@@ -375,7 +401,8 @@ function showCfForm(){
     cfForm.addEventListener('touchend',cfForm._onTE,{passive:true});
   }
 }
-function showCfMain(){
+
+export function showCfMain(){
   editTxId=null;
   document.getElementById('cf-main').style.display='';
   document.getElementById('cf-form').style.display='none';
@@ -386,8 +413,8 @@ function showCfMain(){
   document.getElementById('edit-recur-note')?.remove();
 }
 
-function setCfCtx(ctx,btn){
-  cfCtx=ctx;
+export function setCfCtx(ctx,btn){
+  state.cfCtx=ctx;
   document.querySelectorAll('.cf-type-btn[data-ctx]').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
   else {const b=document.querySelector(`.cf-type-btn[data-ctx="${ctx}"]`);if(b)b.classList.add('active');}
@@ -395,8 +422,8 @@ function setCfCtx(ctx,btn){
   document.getElementById('cf-invest-form').style.display=ctx==='investment'?'':'none';
 }
 
-function setCfType(type,btn){
-  cfType=type;
+export function setCfType(type,btn){
+  state.cfType=type;
   document.querySelectorAll('.cf-type-btn[data-type]').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
   else {const b=document.querySelector(`.cf-type-btn[data-type="${type}"]`);if(b)b.classList.add('active');}
@@ -408,8 +435,8 @@ function setCfType(type,btn){
   if(recurChk){ recurChk.checked=false; toggleRecurring(false); }
 }
 
-function setCfIType(itype,btn){
-  cfIType=itype;
+export function setCfIType(itype,btn){
+  state.cfIType=itype;
   document.querySelectorAll('.cf-type-btn[data-itype]').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
   else {const b=document.querySelector(`.cf-type-btn[data-itype="${itype}"]`);if(b)b.classList.add('active');}
@@ -419,11 +446,11 @@ function setCfIType(itype,btn){
   document.getElementById('inv-expinc-acct-label').textContent=itype==='income'?'To account':'From account';
 }
 
-function toggleRecurring(on){
+export function toggleRecurring(on){
   document.getElementById('cf-recurring-opts').style.display=on?'':'none';
 }
 
-function updateInvCounterparts(){
+export function updateInvCounterparts(){
   ['inv-paid-from','inv-sale-to'].forEach(id=>{ document.getElementById(id).value = ''; });
   document.getElementById('inv-paid-from-label').textContent = 'Select account';
   document.getElementById('inv-paid-from-trigger').classList.add('placeholder');
@@ -431,7 +458,7 @@ function updateInvCounterparts(){
   document.getElementById('inv-sale-to-trigger').classList.add('placeholder');
 }
 
-function calcPurchaseFromUnit(){
+export function calcPurchaseFromUnit(){
   const qty=parseFloat(document.getElementById('inv-qty').value)||0;
   const price=parseFloat(document.getElementById('inv-price').value)||0;
   const total=parseFloat(document.getElementById('inv-total').value)||0;
@@ -442,12 +469,14 @@ function calcPurchaseFromUnit(){
     document.getElementById('inv-price').value=(total/qty).toFixed(4);
   }
 }
-function calcPurchaseFromTotal(){
+
+export function calcPurchaseFromTotal(){
   const qty=parseFloat(document.getElementById('inv-qty').value)||0;
   const total=parseFloat(document.getElementById('inv-total').value)||0;
   if(qty&&total) document.getElementById('inv-price').value=(total/qty).toFixed(4);
 }
-function calcSaleFromUnit(){
+
+export function calcSaleFromUnit(){
   const qty=parseFloat(document.getElementById('inv-sale-qty').value)||0;
   const price=parseFloat(document.getElementById('inv-sale-price').value)||0;
   const total=parseFloat(document.getElementById('inv-sale-total').value)||0;
@@ -457,14 +486,16 @@ function calcSaleFromUnit(){
     document.getElementById('inv-sale-price').value=(total/qty).toFixed(4); updatePnl();
   }
 }
-function calcSaleFromTotal(){
+
+export function calcSaleFromTotal(){
   const qty=parseFloat(document.getElementById('inv-sale-qty').value)||0;
   const total=parseFloat(document.getElementById('inv-sale-total').value)||0;
   if(qty&&total){ document.getElementById('inv-sale-price').value=(total/qty).toFixed(4); updatePnl(); }
 }
+
 function updatePnl(){
   const assetId=document.getElementById('inv-asset').value;
-  const h=holdings.find(x=>x.id===assetId); if(!h) return;
+  const h=state.holdings.find(x=>x.id===assetId); if(!h) return;
   const qty=parseFloat(document.getElementById('inv-sale-qty').value)||0;
   const total=parseFloat(document.getElementById('inv-sale-total').value)||0;
   if(!qty||!total) return;
@@ -476,12 +507,13 @@ function updatePnl(){
   el.innerHTML=`<span style="color:${pnl>=0?'var(--green)':'var(--red)'};font-weight:600">${pnl>=0?'+':''}${fmt(pnl)} (${fmtPct(pct)})</span> vs avg cost of ${fmt(h.avg_cost)}/unit`;
 }
 
-function openCfDatePicker(){
+export function openCfDatePicker(){
   openDatePicker('cf-date', document.getElementById('cf-date').value, v=>{
     document.getElementById('cf-date').value = v;
     updateCfDateLabel();
   }, {withTime:true});
 }
+
 function updateCfDateLabel(){
   const el = document.getElementById('cf-date-label');
   const v  = document.getElementById('cf-date').value;
@@ -508,7 +540,7 @@ function populateCfForm(tx=null){
   {
     const catId = tx?.category_id || '';
     document.getElementById('cf-cat').value = catId;
-    const cat = cfCategories.find(c=>c.id===catId);
+    const cat = state.cfCategories.find(c=>c.id===catId);
     document.getElementById('cf-cat-label').textContent = cat ? catDisplayLabel(cat) : 'Select category';
     document.getElementById('cf-cat-trigger').classList.toggle('placeholder', !cat);
     setTriggerIcon('cf-cat-icon', cat?.icon, cat?.color);
@@ -547,7 +579,7 @@ function populateCfForm(tx=null){
   {
     const catId = tx?.category_id || '';
     document.getElementById('inv-cat').value = catId;
-    const cat = cfCategories.find(c=>c.id===catId);
+    const cat = state.cfCategories.find(c=>c.id===catId);
     document.getElementById('inv-cat-label').textContent = cat ? catDisplayLabel(cat) : 'Select category';
     document.getElementById('inv-cat-trigger').classList.toggle('placeholder', !cat);
     setTriggerIcon('inv-cat-icon', cat?.icon, cat?.color);
@@ -577,14 +609,15 @@ function populateCfForm(tx=null){
   }
 
   // Set context/type — use tx values in edit mode, globals otherwise
-  const ctx  = tx ? (['purchase','sale'].includes(tx.type) ? 'investment' : 'account') : cfCtx;
-  const type = tx?.type || cfType;
+  const ctx  = tx ? (['purchase','sale'].includes(tx.type) ? 'investment' : 'account') : state.cfCtx;
+  const type = tx?.type || state.cfType;
   setCfCtx(ctx, null);
   if(['purchase','sale'].includes(type)) setCfIType(type, null);
   else setCfType(type, null);
 }
 
-async function saveCfTransaction(){
+
+export async function saveCfTransaction(){
   // If in edit mode, PATCH instead of POST
   if(editTxId){
     const amount=parseFloat(document.getElementById('cf-amount').value)||0;
@@ -594,21 +627,21 @@ async function saveCfTransaction(){
     const fromId=document.getElementById('cf-from').value||null;
     const toId=document.getElementById('cf-to').value||null;
     if(amount<=0){await showAlert('Please enter an amount.');return;}
-    if(cfType==='transfer'&&fromId===toId){await showAlert('Source and destination account must be different.');return;}
+    if(state.cfType==='transfer'&&fromId===toId){await showAlert('Source and destination account must be different.');return;}
 
     // Undo what the original transaction did to its holding(s) before applying the edit —
     // otherwise the old amount stays baked into the balance forever.
-    const oldTx = cfTransactions.find(t=>t.id===editTxId);
+    const oldTx = state.cfTransactions.find(t=>t.id===editTxId);
     if(oldTx) await reverseBalanceChange(oldTx.type, Number(oldTx.amount), oldTx.holding_id, oldTx.holding_to_id);
-    await applyBalanceChange(cfType, amount, fromId, cfType==='transfer'?toId:null);
+    await applyBalanceChange(state.cfType, amount, fromId, state.cfType==='transfer'?toId:null);
 
     await api(`cashflow_transactions?id=eq.${editTxId}`,{method:'PATCH',body:JSON.stringify({
-      type:cfType, amount, description:desc||null, category_id:cfType==='transfer'?null:catId,
-      holding_id:fromId, holding_to_id:cfType==='transfer'?toId:null,
+      type:state.cfType, amount, description:desc||null, category_id:state.cfType==='transfer'?null:catId,
+      holding_id:fromId, holding_to_id:state.cfType==='transfer'?toId:null,
       date:new Date(date).toISOString()
     })});
     editTxId=null;
-    [cfTransactions,holdings]=await Promise.all([api('cashflow_transactions?order=date.desc'),api('holdings?order=created_at.asc')]);
+    [state.cfTransactions,state.holdings]=await Promise.all([api('cashflow_transactions?order=date.desc'),api('holdings?order=created_at.asc')]);
     renderCashflow(); renderOverview(); showCfMain(); toast('Transaction updated ✓');
     // Restore form title and recurring option
     const recurWrap=document.querySelector('[id="cf-recurring"]')?.closest('.form-group');
@@ -625,16 +658,16 @@ async function saveCfTransaction(){
   const isRecur=document.getElementById('cf-recurring').checked;
   if(amount<=0){await showAlert('Please enter an amount.');return;}
   if(!fromId){await showAlert('Please select an account.');return;}
-  if(cfType==='transfer'&&fromId===toId){await showAlert('Source and destination account must be different.');return;}
-  if(cfType==='transfer'||cfType==='expense'){
-    const fromH=holdings.find(h=>h.id===fromId);
+  if(state.cfType==='transfer'&&fromId===toId){await showAlert('Source and destination account must be different.');return;}
+  if(state.cfType==='transfer'||state.cfType==='expense'){
+    const fromH=state.holdings.find(h=>h.id===fromId);
     if(fromH&&fromH.avg_cost<amount){
       if(!await showConfirm(`This will bring ${fromH.name||fromH.ticker} to a negative balance (current: ${fmt(fromH.avg_cost)}, amount: ${fmt(amount)}).
 
 Proceed anyway?`)) return;
     }
   }
-  const txData={type:cfType,amount,description:desc||null,category_id:cfType==='transfer'?null:catId,holding_id:fromId,holding_to_id:cfType==='transfer'?toId:null,date:new Date(date).toISOString()};
+  const txData={type:state.cfType,amount,description:desc||null,category_id:state.cfType==='transfer'?null:catId,holding_id:fromId,holding_to_id:state.cfType==='transfer'?toId:null,date:new Date(date).toISOString()};
   if(isRecur){
     const freq=document.getElementById('cf-freq').value;
     const start=document.getElementById('cf-recur-start').value;
@@ -642,24 +675,24 @@ Proceed anyway?`)) return;
     // so next_due must be advanced past it — otherwise processRecurrences() sees this same
     // date as overdue on the next load and creates a duplicate transaction for it.
     const nextDue=advanceDue(new Date(start), freq);
-    const recur=await api('recurrences',{method:'POST',body:JSON.stringify({type:cfType,amount,description:desc||null,category_id:cfType==='transfer'?null:catId,holding_id:fromId,holding_to_id:cfType==='transfer'?toId:null,frequency:freq,next_due:nextDue.toISOString(),active:true})});
+    const recur=await api('recurrences',{method:'POST',body:JSON.stringify({type:state.cfType,amount,description:desc||null,category_id:state.cfType==='transfer'?null:catId,holding_id:fromId,holding_to_id:state.cfType==='transfer'?toId:null,frequency:freq,next_due:nextDue.toISOString(),active:true})});
     if(Array.isArray(recur)&&recur[0]) txData.recurring_id=recur[0].id;
   }
   await api('cashflow_transactions',{method:'POST',body:JSON.stringify(txData)});
-  await applyBalanceChange(cfType,amount,fromId,cfType==='transfer'?toId:null);
-  [cfTransactions,cfRecurrences,holdings]=await Promise.all([api('cashflow_transactions?order=date.desc'),api('recurrences?order=next_due.asc'),api('holdings?order=created_at.asc')]);
-  holdings = await api('holdings?order=created_at.asc');
+  await applyBalanceChange(state.cfType,amount,fromId,state.cfType==='transfer'?toId:null);
+  [state.cfTransactions,cfRecurrences,state.holdings]=await Promise.all([api('cashflow_transactions?order=date.desc'),api('recurrences?order=next_due.asc'),api('holdings?order=created_at.asc')]);
+  state.holdings = await api('holdings?order=created_at.asc');
   renderCashflow(); renderSettings(); renderHoldings(); renderOverview();
   showCfMain(); toast('Transaction saved ✓');
 }
 
-async function saveInvTransaction(){
+export async function saveInvTransaction(){
   const assetId=document.getElementById('inv-asset').value;
-  const h=holdings.find(x=>x.id===assetId);
+  const h=state.holdings.find(x=>x.id===assetId);
   if(!h){await showAlert('Please select an asset.');return;}
   const desc=document.getElementById('inv-cat').value;
   const dateIso=new Date(document.getElementById('inv-date').value).toISOString();
-  if(cfIType==='purchase'){
+  if(state.cfIType==='purchase'){
     const qty=parseFloat(document.getElementById('inv-qty').value)||0;
     const price=parseFloat(document.getElementById('inv-price').value)||0;
     const total=parseFloat(document.getElementById('inv-total').value)||(qty*price);
@@ -671,8 +704,8 @@ async function saveInvTransaction(){
     const newQty=h.qty+qty;
     await api(`holdings?id=eq.${assetId}`,{method:'PATCH',body:JSON.stringify({qty:newQty,avg_cost:newAvgCost})});
     await api('cashflow_transactions',{method:'POST',body:JSON.stringify({type:'purchase',amount:total,description:`Purchased ${qty} ${cleanCryptoTicker(h.ticker)||h.ticker}`,holding_id:assetId,holding_to_id:paidFromId,date:dateIso})});
-    if(paidFromId){const hf=holdings.find(x=>x.id===paidFromId);if(hf)await api(`holdings?id=eq.${paidFromId}`,{method:'PATCH',body:JSON.stringify({avg_cost:Math.max(0,(hf.avg_cost||0)-total)})});}
-  } else if(cfIType==='sale'){
+    if(paidFromId){const hf=state.holdings.find(x=>x.id===paidFromId);if(hf)await api(`holdings?id=eq.${paidFromId}`,{method:'PATCH',body:JSON.stringify({avg_cost:Math.max(0,(hf.avg_cost||0)-total)})});}
+  } else if(state.cfIType==='sale'){
     const qty=parseFloat(document.getElementById('inv-sale-qty').value)||0;
     const price=parseFloat(document.getElementById('inv-sale-price').value)||0;
     const total=parseFloat(document.getElementById('inv-sale-total').value)||(qty*price);
@@ -683,27 +716,25 @@ async function saveInvTransaction(){
     const newQty=h.qty-qty;
     await api(`holdings?id=eq.${assetId}`,{method:'PATCH',body:JSON.stringify({qty:newQty})});
     await api('cashflow_transactions',{method:'POST',body:JSON.stringify({type:'sale',amount:total,description:`Sold ${qty} ${cleanCryptoTicker(h.ticker)||h.ticker}`,holding_id:assetId,holding_to_id:saleToId,date:dateIso})});
-    if(saleToId){const ht=holdings.find(x=>x.id===saleToId);if(ht)await api(`holdings?id=eq.${saleToId}`,{method:'PATCH',body:JSON.stringify({avg_cost:(ht.avg_cost||0)+total})});}
+    if(saleToId){const ht=state.holdings.find(x=>x.id===saleToId);if(ht)await api(`holdings?id=eq.${saleToId}`,{method:'PATCH',body:JSON.stringify({avg_cost:(ht.avg_cost||0)+total})});}
   } else {
     const amount=parseFloat(document.getElementById('inv-amount').value)||0;
     const catId=document.getElementById('inv-cat').value||null;
     const acctId=document.getElementById('inv-expinc-acct').value||null;
     const desc2=document.getElementById('inv-desc').value.trim();
     if(amount<=0){await showAlert('Please enter an amount.');return;}
-    await api('cashflow_transactions',{method:'POST',body:JSON.stringify({type:cfIType,amount,description:desc2||null,category_id:catId,holding_id:assetId,holding_to_id:null,date:dateIso})});
-    await applyBalanceChange(cfIType,amount,acctId||assetId,null);
+    await api('cashflow_transactions',{method:'POST',body:JSON.stringify({type:state.cfIType,amount,description:desc2||null,category_id:catId,holding_id:assetId,holding_to_id:null,date:dateIso})});
+    await applyBalanceChange(state.cfIType,amount,acctId||assetId,null);
   }
-  [cfTransactions,holdings]=await Promise.all([api('cashflow_transactions?order=date.desc'),api('holdings?order=created_at.asc')]);
+  [state.cfTransactions,state.holdings]=await Promise.all([api('cashflow_transactions?order=date.desc'),api('holdings?order=created_at.asc')]);
   renderCashflow(); renderHoldings(); renderOverview();
   await refreshPrices(true, true);
   showCfMain(); toast('Transaction saved ✓');
 }
 
 // ── Edit transaction ──
-let editTxId = null;
-
-function editCfTx(txId){
-  const t = cfTransactions.find(x=>x.id===txId); if(!t) return;
+export function editCfTx(txId){
+  const t = state.cfTransactions.find(x=>x.id===txId); if(!t) return;
 
   if(t.type==='purchase' || t.type==='sale'){
     showAlert(`Editing a ${t.type} isn't supported — changing quantity or price would need to recalculate your average cost history, which can't be done safely from here. Delete this transaction and re-add it with the correct details instead.`);
@@ -743,15 +774,102 @@ function editCfTx(txId){
   }
 }
 
-async function deleteCfTx(id,holdingId,holdingToId,type,amount){
+export async function deleteCfTx(id,holdingId,holdingToId,type,amount){
   if(!await showConfirm('Delete this transaction? The holding balance will be reversed.')) return;
   await reverseBalanceChange(type,Number(amount),holdingId||null,holdingToId||null);
   await api(`cashflow_transactions?id=eq.${id}`,{method:'DELETE'});
-  [cfTransactions,holdings]=await Promise.all([api('cashflow_transactions?order=date.desc'),api('holdings?order=created_at.asc')]);
+  [state.cfTransactions,state.holdings]=await Promise.all([api('cashflow_transactions?order=date.desc'),api('holdings?order=created_at.asc')]);
   renderCashflow(); renderOverview(); toast('Transaction deleted');
 }
 
-// ── Settings ──
-let recurCalYear = new Date().getFullYear();
-let recurCalMonth = new Date().getMonth();
+export function openCfCategoryPicker() {
+  const current = document.getElementById('cf-cat').value;
+  const options = buildCategoryPickerOptions();
+  options.push({ value: '__new_cat__', label: 'New category…', icon: 'ti-plus', color: 'var(--accent)' });
+  openSelectPicker('Select category', options, current, (val) => {
+    if (val === '__new_cat__') {
+      state.catCreateTargetField = 'cf-cat';
+      closeModal('modal-select');
+      window.openCategoryModal?.();
+      return;
+    }
+    document.getElementById('cf-cat').value = val;
+    const cat = (state.cfCategories || []).find(c => c.id === val);
+    document.getElementById('cf-cat-label').textContent = cat ? catDisplayLabel(cat) : 'Select category';
+    document.getElementById('cf-cat-trigger').classList.toggle('placeholder', !cat);
+    setTriggerIcon('cf-cat-icon', cat?.icon, cat?.color);
+  });
+}
 
+export function openCfAccountPicker(which) {
+  const fieldId   = which === 'from' ? 'cf-from' : 'cf-to';
+  const labelId   = which === 'from' ? 'cf-from-label-text' : 'cf-to-label-text';
+  const triggerId = which === 'from' ? 'cf-from-trigger' : 'cf-to-trigger';
+  const iconId    = which === 'from' ? 'cf-from-icon' : 'cf-to-icon';
+  const current = document.getElementById(fieldId).value;
+  const options = accountOptionsList();
+  openSelectPicker('Select account', options, current, (val) => {
+    document.getElementById(fieldId).value = val;
+    const opt = options.find(o => o.value === val);
+    document.getElementById(labelId).textContent = opt ? opt.label : 'Select account';
+    document.getElementById(triggerId).classList.toggle('placeholder', !opt);
+    setTriggerIcon(iconId, opt?.icon, opt?.color);
+  });
+}
+
+export function openCfFreqPicker() {
+  const current = document.getElementById('cf-freq').value || 'monthly';
+  openSelectPicker('Select frequency', CF_FREQ_OPTIONS, current, (val) => {
+    document.getElementById('cf-freq').value = val;
+    const opt = CF_FREQ_OPTIONS.find(o => o.value === val);
+    document.getElementById('cf-freq-label').textContent = opt ? opt.label : 'Monthly';
+  });
+}
+
+// ─────────────────────────────────────────────
+// Legacy inline-HTML compatibility
+// ─────────────────────────────────────────────
+exposeLegacyFunctions({
+  loadCashflow,
+  renderCashflow,
+
+  openCfAccountPicker,
+  openCfFreqPicker,
+  openCfCategoryPicker,
+
+  toggleCfAccount,
+  allTxDateSummary,
+  toggleAllTxDateFilter,
+  toggleAllTxSearch,
+  closeAllTxSearch,
+  onAllTxSearch,
+  clearAllTxDate,
+
+  showAllTransactions,
+  renderAllTx,
+  renderAllTxBody,
+  setAllTxFilter,
+
+  showCfForm,
+  showCfMain,
+  setCfCtx,
+  setCfType,
+  setCfIType,
+  toggleRecurring,
+
+  updateInvCounterparts,
+  calcPurchaseFromUnit,
+  calcPurchaseFromTotal,
+  calcSaleFromUnit,
+  calcSaleFromTotal,
+
+  openCfDatePicker,
+  saveCfTransaction,
+  saveInvTransaction,
+  editCfTx,
+  deleteCfTx,
+
+  applyBalanceChange,
+  reverseBalanceChange,
+  cfTxRow
+});
