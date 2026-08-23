@@ -1,3 +1,145 @@
+const SUPABASE_URL = 'https://lwkkuoauvvfrwboasxbi.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3a2t1b2F1dnZmcndib2FzeGJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzMTQ3MzksImV4cCI6MjEwMDg5MDczOX0.Lg_pCz7gG3Qa5pfZgDmhzjn2fiHz7EUuT85O5SFXb54';
+const APP_ENV = 'dev'; // 'dev' shows a DEV badge in the header · set to 'prod' for the production copy
+if(APP_ENV==='dev'){
+  const envBadge=document.getElementById('env-badge');
+  if(envBadge) envBadge.style.display='inline-block';
+  document.title = 'Financial Hub · DEV';
+}
+
+const APP_SECRET = 'zW32WdZ6sjemsWkQqXUc4Fvfa6TxtvIq6H63FsKYdzc'; // sent on every Supabase call; RLS policies require this header to match
+
+const api = (path, opts={}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+  headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, 'Content-Type':'application/json', Prefer:'return=representation', 'X-App-Secret':APP_SECRET, ...opts.headers },
+  ...opts
+}).then(r=>r.json());
+
+let holdings=[], transactions=[], prices={}, snapshots=[], txFilter='all', activePeriod=30;
+let trendChart, liquidityChart, monthlyChart, yearlyIncomeChart, yearlyOutcomeChart, savingsChart, investedChart;
+// Use app font in all Chart.js charts
+if(typeof Chart!=='undefined'){
+  Chart.defaults.font.family="'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif";
+  Chart.defaults.font.size=11;
+}
+
+const TYPE_LABELS = {bank:'Bank',bond:'Bond',cash:'Cash',crypto:'Crypto',dividend:'Dividends',etf:'ETF',stock:'Stock'};
+const TYPE_ICONS  = {bank:'ti-building-bank',bond:'ti-certificate',cash:'ti-cash',crypto:'ti-currency-bitcoin',dividend:'ti-coin',etf:'ti-trending-up',stock:'ti-chart-candle'};
+const PALETTE = ['#6366f1','#10b981','#f59e0b','#ec4899','#0ea5e9','#84cc16','#f97316','#8b5cf6','#06b6d4','#a3e635'];
+function fmt(n){
+  const num = Number(n);
+  const decimals = Math.abs(num) > 0 && Math.abs(num) < 1 ? 4 : 2;
+  return '€\u00a0'+num.toLocaleString('it-IT',{minimumFractionDigits:decimals,maximumFractionDigits:decimals});
+}
+function fmtN(n,d=6){ return Number(n).toLocaleString('it-IT',{maximumFractionDigits:d}); }
+
+// ── Custom dialog (replaces browser confirm/alert) ──
+function showDialog(message, {title='', confirmText='OK', cancelText=null, danger=false}={}){
+  return new Promise(resolve=>{
+    document.getElementById('dialog-title').textContent = title||'';
+    document.getElementById('dialog-title').style.display = title ? '' : 'none';
+    document.getElementById('dialog-message').innerHTML = message.replace(/\n/g,'<br>');
+    const footer = document.getElementById('dialog-footer');
+    footer.innerHTML = '';
+    if(cancelText!==null){
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'btn';
+      cancelBtn.textContent = cancelText;
+      cancelBtn.onclick = ()=>{ closeModal('modal-dialog'); resolve(false); };
+      footer.appendChild(cancelBtn);
+    }
+    const okBtn = document.createElement('button');
+    okBtn.className = 'btn' + (danger?' btn-danger-filled':'  btn-primary');
+    okBtn.style.cssText = '';
+    okBtn.textContent = confirmText;
+    okBtn.onclick = ()=>{ closeModal('modal-dialog'); resolve(true); };
+    footer.appendChild(okBtn);
+    openModal('modal-dialog');
+  });
+}
+function showAlert(msg, title=''){
+  return showDialog(msg,{title, confirmText:'OK', cancelText:null});
+}
+function showConfirm(msg, title='', danger=false){
+  return showDialog(msg,{title, confirmText:'OK', cancelText:'Cancel', danger});
+}
+function fmtPct(n){ return (n>=0?'+':'')+Number(n).toFixed(2)+'%'; }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
+
+// Scroll to top
+function scrollToTop(){
+  if(document.scrollingElement) document.scrollingElement.scrollTop=0;
+  window.scrollTo(0,0);
+  document.documentElement.scrollTop=0;
+  document.body.scrollTop=0;
+}
+
+function showPage(name,btn){
+  localStorage.setItem('fh_page', name);
+  // Sync bottom tab bar active state
+  document.querySelectorAll('.bottom-tab').forEach(t=>t.classList.remove('active'));
+  const mobilePageMap={overview:'overview',holdings:'holdings',cashflow:'cashflow',insights:'rpt-insights',reports:'rpt-insights',settings:'settings'};
+  const mobileTarget=mobilePageMap[name]||name;
+  const mobileBtn=document.querySelector(`.bottom-tab[data-page="${mobileTarget}"]`);
+  if(mobileBtn) mobileBtn.classList.add('active');
+  // Update mobile analytics sub-nav active state (both pages have sub-nav)
+  ['mobile-subnav-insights','mobile-subnav-insights2'].forEach(id=>{const el=document.getElementById(id);if(el) el.classList.toggle('active',name==='insights');});
+  ['mobile-subnav-reports','mobile-subnav-reports2'].forEach(id=>{const el=document.getElementById(id);if(el) el.classList.toggle('active',name==='reports');});
+
+  // Collapse all accordions when leaving holdings
+  document.querySelectorAll('.cat-header.open').forEach(h=>{
+    h.classList.remove('open');
+    h.nextElementSibling.classList.remove('open');
+    h.setAttribute('aria-expanded','false');
+  });
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  // Scroll after page is shown (works for most pages; insights/reports scroll after render)
+  if(name!=='insights'&&name!=='reports') requestAnimationFrame(scrollToTop);
+  if(btn){
+    btn.classList.add('active');
+  } else {
+    document.querySelectorAll('.nav-item').forEach(b=>{
+      if(b.getAttribute('onclick') && b.getAttribute('onclick').includes("'"+name+"'")) b.classList.add('active');
+    });
+  }
+  if(name==='overview') renderOverview();
+  // Show live price indicator only on holdings page
+  document.body.className = document.body.className.replace(/page-\w+/g,'').trim();
+  document.body.classList.add('page-'+name);
+  if(name==='insights'){
+    requestAnimationFrame(()=>{
+      renderAllocation(); renderInsights();
+      scrollToTop();
+      setTimeout(()=>{ scrollToTop(); }, 120);
+    });
+  }
+  // prices only refresh manually via the Refresh button
+  if(name==='cashflow'){
+    // Reset cashflow to main view if form was open
+    const cfForm=document.getElementById('cf-form');
+    const cfMain=document.getElementById('cf-main');
+    const cfFab=document.getElementById('cf-fab');
+    if(cfForm&&cfForm.style.display!=='none'){ showCfMain(); }
+    else { renderCashflow(); if(cfFab) cfFab.style.display=''; }
+  }
+  if(name!=='cashflow' && bulkSelectMode){
+    bulkSelectMode=false; selectedTxIds.clear();
+    const bt=document.getElementById('cf-bulk-toggle');
+    if(bt){ bt.style.background=''; bt.innerHTML='<i class="ti ti-checkbox"></i> Select'; }
+    document.getElementById('bulk-toolbar')?.classList.remove('open');
+  }
+  if(name!=='cashflow'){ cfOpenTypes.clear(); }
+  if(name!=='holdings'){
+    // Always return to the category grid when leaving the Holdings page
+    closeCategoryDetail();
+  }
+  if(name==='settings'){ showSettingsMain(); }
+  if(name==='reports'){ renderReports(); requestAnimationFrame(()=>{ scrollToTop(); setTimeout(scrollToTop,80); }); }
+  // Hide FAB when not on cashflow
+  if(name!=='cashflow'){ const fab=document.getElementById('cf-fab'); if(fab) fab.style.display='none'; }
+}
+
 function openModal(id){
   document.getElementById(id).classList.add('open');
   if(id==='modal-holding'){
@@ -390,3 +532,38 @@ function openInvCatPicker(){
 }
 
 // ── LOAD ──
+async function loadAll(deferRender=false){
+  [holdings, transactions, snapshots] = await Promise.all([
+    api('holdings?order=sort_order.asc,created_at.asc').catch(()=>api('holdings?order=created_at.asc')).catch(()=>api('holdings?order=created_at.asc')),
+    api('transactions?order=created_at.desc'),
+    api('net_worth_snapshots?order=snapshot_date.asc')
+  ]);
+  await maybeTakeSnapshot();
+  if(!deferRender){ refreshHoldingsViews(); renderTx(); renderOverview(); }
+  document.getElementById('tx-date').value = new Date().toISOString().split('T')[0];
+}
+
+// ── SNAPSHOT ──
+async function maybeTakeSnapshot(){
+  const today = new Date().toISOString().split('T')[0];
+  const alreadyToday = snapshots.some(s=>s.snapshot_date===today);
+  if(alreadyToday || !holdings.length) return;
+  const totalVal = holdings.reduce((s,h)=>s+getVal(h),0);
+  if(totalVal===0) return;
+  const row = await api('net_worth_snapshots',{method:'POST',body:JSON.stringify({snapshot_date:today,total_value:totalVal})});
+  if(Array.isArray(row) && row[0]) snapshots.push(row[0]);
+}
+
+// ── HOLDINGS ──
+function getVal(h){
+  const cleanT = h.type==='crypto' ? cleanCryptoTicker(h.ticker) : h.ticker;
+  const price = prices[cleanT] ?? prices[h.ticker];
+  return (price != null ? price : h.avg_cost) * h.qty;
+}
+
+function cleanCryptoTicker(ticker){ return ticker.replace(/[-/](EUR|USD|USDT|USDC|GBP)$/i,'').toUpperCase(); }
+function cleanCryptoName(name){ return name.replace(/\s+(EUR|USD|USDT|USDC|GBP)$/i,'').trim(); }
+function getCost(h){ return h.avg_cost * h.qty; }
+function getGain(h){ return getVal(h)-getCost(h); }
+function getGainPct(h){ const c=getCost(h); return c>0?getGain(h)/c*100:0; }
+

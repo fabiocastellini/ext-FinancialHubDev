@@ -1,3 +1,25 @@
+/* ── BOTTOM TAB BAR ── */
+.bottom-tabs{display:none;position:fixed;bottom:0;left:0;right:0;height:64px;background:rgba(14,17,23,0.96);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid rgba(255,255,255,0.07);z-index:100;padding-bottom:env(safe-area-inset-bottom)}
+.bottom-tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:none;border:none;color:var(--text3);font-size:10px;font-weight:500;font-family:inherit;cursor:pointer;transition:color 0.15s;padding:6px 4px}
+.bottom-tab i{font-size:20px;line-height:1}
+@media(max-width:768px){
+  .btn:active{transform:scale(0.95);opacity:0.8;transition:none}
+  .bottom-tab:active{opacity:0.6;transition:none}
+  .holding-box-clickable:active{transform:scale(0.97);transition:none}
+  .cat-header:active{opacity:0.8;transition:none}
+  .cf-account-header:active{opacity:0.8;transition:none}
+  .bottom-tab-active-pulse{animation:none}
+}
+.bottom-tab.active{color:var(--accent)}
+.bottom-tab.active i{
+  background:rgba(16,212,176,0.12);
+  border-radius:12px;
+  padding:4px 14px;
+  display:inline-block;
+  filter:drop-shadow(0 0 6px rgba(16,212,176,0.35));
+  margin-bottom:1px;
+}
+
 /* ── MOBILE SUB-NAV ── */
 .mobile-subnav{display:none;gap:4px;margin-bottom:1.25rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px}
 .mobile-subnav-btn{flex:1;padding:8px;border:none;background:none;color:var(--text3);font-size:13px;font-weight:500;font-family:inherit;border-radius:var(--radius-xs);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all 0.15s}
@@ -81,3 +103,22 @@
   #live-price-indicator #refresh-info{display:none}
 }
 
+/* ── FIX OVERFLOW GRAFICI MOBILE ── */
+/* Previene espansione incontrollata dei contenitori Grid/Flex causata da Chart.js su device ad alto DPR */
+.alloc-grid,
+.alloc-grid > div,
+.card,
+.ins-section-block,
+.chart-wrap {
+  min-width: 0;
+  max-width: 100%;
+}
+/* Il canvas non può mai superare la larghezza del padre */
+.chart-wrap canvas {
+  max-width: 100%;
+}
+/* Sicurezza globale: impedisce scroll orizzontale imprevisto */
+html, body {
+  overflow-x: hidden;
+  width: 100%;
+}
