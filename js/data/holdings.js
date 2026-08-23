@@ -861,6 +861,7 @@ exposeLegacyFunctions({
   editBalance,
   deleteHolding,
   deleteCategoryHoldings,
+  renderHoldings,
   refreshHoldingsViews,
 
   onTickerSearch,

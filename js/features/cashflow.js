@@ -219,21 +219,21 @@ export function toggleCfAccount(header){
 }
 
 export function allTxDateSummary(){
-  if(allTxFrom && allTxTo) return `${fmtDateDDMMYYYY(allTxFrom)} → ${fmtDateDDMMYYYY(allTxTo)}`;
-  if(allTxFrom) return `From ${fmtDateDDMMYYYY(allTxFrom)}`;
-  if(allTxTo) return `Until ${fmtDateDDMMYYYY(allTxTo)}`;
+  if(state.allTxFrom && state.allTxTo) return `${fmtDateDDMMYYYY(state.allTxFrom)} → ${fmtDateDDMMYYYY(state.allTxTo)}`;
+  if(state.allTxFrom) return `From ${fmtDateDDMMYYYY(state.allTxFrom)}`;
+  if(state.allTxTo) return `Until ${fmtDateDDMMYYYY(state.allTxTo)}`;
   return 'Date range';
 }
 
 export function toggleAllTxDateFilter(open){
-  allTxDateFilterOpen = (open!==undefined) ? open : !allTxDateFilterOpen;
+  state.allTxDateFilterOpen = (open!==undefined) ? open : !state.allTxDateFilterOpen;
   renderAllTxDateFilter();
 }
 
 function renderAllTxDateFilter(){
   const wrap=document.getElementById('alltx-date-wrap'); if(!wrap) return;
-  const active = !!(allTxFrom||allTxTo);
-  if(!allTxDateFilterOpen){
+  const active = !!(state.allTxFrom||state.allTxTo);
+  if(!state.allTxDateFilterOpen){
     wrap.innerHTML = `
       <button type="button" class="btn btn-sm${active?' btn-primary':''}" onclick="toggleAllTxDateFilter(true)">
         <i class="ti ti-calendar"></i> ${allTxDateSummary()}
@@ -242,12 +242,13 @@ function renderAllTxDateFilter(){
     wrap.innerHTML = `
       <div class="date-filter-row">
         <i class="ti ti-calendar"></i>
-        <button type="button" class="date-field${allTxFrom?'':' placeholder'}" id="alltx-from-field" onclick="openDatePicker('alltx-from', allTxFrom, v=>{ allTxFrom=v; updateAllTxDateField('from'); renderAllTxBody(); })">
-          <span id="alltx-from-label">${allTxFrom?fmtDateDDMMYYYY(allTxFrom):'dd/mm/yyyy'}</span>
+        
+        <button type="button" class="date-field${state.allTxFrom?'':' placeholder'}" id="alltx-from-field" onclick="openDatePicker('alltx-from',getAllTxFrom(),v=>{setAllTxFrom(v);updateAllTxDateField('from');renderAllTxBody()})">
+          <span id="alltx-from-label">${state.allTxFrom?fmtDateDDMMYYYY(state.allTxFrom):'dd/mm/yyyy'}</span>
         </button>
         <span class="date-arrow">→</span>
-        <button type="button" class="date-field${allTxTo?'':' placeholder'}" id="alltx-to-field" onclick="openDatePicker('alltx-to', allTxTo, v=>{ allTxTo=v; updateAllTxDateField('to'); renderAllTxBody(); })">
-          <span id="alltx-to-label">${allTxTo?fmtDateDDMMYYYY(allTxTo):'dd/mm/yyyy'}</span>
+        <button type="button" class="date-field${state.allTxTo?'':' placeholder'}" id="alltx-to-field" onclick="openDatePicker('alltx-to',getAllTxTo(),v=>{setAllTxTo(v);updateAllTxDateField('to');renderAllTxBody()})">
+          <span id="alltx-to-label">${state.allTxTo?fmtDateDDMMYYYY(state.allTxTo):'dd/mm/yyyy'}</span>
         </button>
         <button type="button" class="btn btn-sm" onclick="clearAllTxDate()" title="Clear date filter"><i class="ti ti-x" style="font-size:11px"></i></button>
         <button type="button" class="btn btn-sm" onclick="toggleAllTxDateFilter(false)" title="Collapse"><i class="ti ti-chevron-up" style="font-size:11px"></i></button>
@@ -255,22 +256,22 @@ function renderAllTxDateFilter(){
   }
 }
 
-function updateAllTxDateField(which){
+export function updateAllTxDateField(which){
   const field=document.getElementById(`alltx-${which}-field`);
   const label=document.getElementById(`alltx-${which}-label`);
-  const val = which==='from' ? allTxFrom : allTxTo;
+  const val = which==='from' ? state.allTxFrom : state.allTxTo;
   if(!field||!label) return;
   label.textContent = val ? fmtDateDDMMYYYY(val) : 'dd/mm/yyyy';
   field.classList.toggle('placeholder', !val);
 }
 
-function clearAllTxDate(){
-  allTxFrom=''; allTxTo='';
+export function clearAllTxDate(){
+  state.allTxFrom=''; state.allTxTo='';
   renderAllTxDateFilter();
   renderAllTxBody();
 }
 
-function toggleAllTxSearch(){
+export function toggleAllTxSearch(){
   const wrap=document.getElementById('alltx-search-wrap');
   const toggle=document.getElementById('alltx-search-toggle');
   if(!wrap) return;
@@ -283,38 +284,38 @@ function toggleAllTxSearch(){
   }
 }
 function closeAllTxSearch(){
-  allTxSearchQuery='';
+  state.allTxSearchQuery='';
   const wrap=document.getElementById('alltx-search-wrap'); if(wrap) wrap.style.display='none';
   const input=document.getElementById('alltx-search-input'); if(input) input.value='';
   document.getElementById('alltx-search-toggle')?.classList.remove('btn-primary');
   renderAllTxBody();
 }
 function onAllTxSearch(q){
-  allTxSearchQuery=q.trim().toLowerCase();
+  state.allTxSearchQuery=q.trim().toLowerCase();
   renderAllTxBody();
 }
 
 export function setAllTxFilter(f,btn){
-  allTxFilter=f;
+  state.allTxFilter=f;
   document.querySelectorAll('.alltx-filter').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   renderAllTxBody();
 }
 
 export function renderAllTxBody(){
-  const h=state.holdings.find(x=>x.id===allTxHoldingId);
-  const hId=allTxHoldingId;
+  const h=state.holdings.find(x=>x.id===state.allTxHoldingId);
+  const hId=state.allTxHoldingId;
   let hTxs=state.cfTransactions.filter(t=>t.holding_id===hId||t.holding_to_id===hId);
-  if(allTxFilter==='income')   hTxs=hTxs.filter(t=>isIncomeSide(t,hId));
-  if(allTxFilter==='outcome')  hTxs=hTxs.filter(t=>isOutcomeSide(t,hId));
-  if(allTxFilter==='transfer') hTxs=hTxs.filter(t=>isTransferSide(t));
-  if(allTxFrom) hTxs=hTxs.filter(t=>t.date>=allTxFrom);
-  if(allTxTo)   hTxs=hTxs.filter(t=>t.date<=allTxTo);
-  if(allTxSearchQuery) hTxs=hTxs.filter(t=>{
+  if(state.allTxFilter==='income')   hTxs=hTxs.filter(t=>isIncomeSide(t,hId));
+  if(state.allTxFilter==='outcome')  hTxs=hTxs.filter(t=>isOutcomeSide(t,hId));
+  if(state.allTxFilter==='transfer') hTxs=hTxs.filter(t=>isTransferSide(t));
+  if(state.allTxFrom) hTxs=hTxs.filter(t=>t.date>=state.allTxFrom);
+  if(state.allTxTo)   hTxs=hTxs.filter(t=>t.date<=state.allTxTo);
+  if(state.allTxSearchQuery) hTxs=hTxs.filter(t=>{
     const desc=(t.description||'').toLowerCase();
     const cat=state.cfCategories.find(c=>c.id===t.category_id);
     const catName=(cat?.name||'').toLowerCase();
-    return desc.includes(allTxSearchQuery)||catName.includes(allTxSearchQuery);
+    return desc.includes(state.allTxSearchQuery)||catName.includes(state.allTxSearchQuery);
   });
   const body=document.getElementById('alltx-body'); if(!body) return;
   const groups={};
@@ -335,7 +336,7 @@ export function renderAllTxBody(){
 export function renderAllTx(){
   const cfHeader=document.getElementById('cf-page-header'); if(cfHeader) cfHeader.style.display='none';
   const cfSearchbar=document.getElementById('cf-searchbar'); if(cfSearchbar) cfSearchbar.style.display='none';
-  const h=state.holdings.find(x=>x.id===allTxHoldingId);
+  const h=state.holdings.find(x=>x.id===state.allTxHoldingId);
   const dispName=h?(h.type==='crypto'?cleanCryptoName(h.name||h.ticker):(h.name||h.ticker)):'Account';
   const container=document.getElementById('cf-accounts');
   const header=document.createElement('div');
@@ -374,7 +375,7 @@ export function renderAllTx(){
 }
 
 export function showAllTransactions(holdingId){
-  allTxHoldingId=holdingId; allTxFilter='all'; allTxFrom=''; allTxTo=''; allTxDateFilterOpen=false; allTxSearchQuery='';
+  state.allTxHoldingId=holdingId; state.allTxFilter='all'; state.allTxFrom=''; state.allTxTo=''; state.allTxDateFilterOpen=false; state.allTxSearchQuery='';
   renderAllTx();
 }
 
@@ -403,7 +404,7 @@ export function showCfForm(){
 }
 
 export function showCfMain(){
-  editTxId=null;
+  state.editTxId=null;
   document.getElementById('cf-main').style.display='';
   document.getElementById('cf-form').style.display='none';
   document.getElementById('cf-fab').style.display='';
@@ -619,7 +620,7 @@ function populateCfForm(tx=null){
 
 export async function saveCfTransaction(){
   // If in edit mode, PATCH instead of POST
-  if(editTxId){
+  if(state.editTxId){
     const amount=parseFloat(document.getElementById('cf-amount').value)||0;
     const desc=document.getElementById('cf-desc').value.trim();
     const catId=document.getElementById('cf-cat').value||null;
@@ -631,16 +632,16 @@ export async function saveCfTransaction(){
 
     // Undo what the original transaction did to its holding(s) before applying the edit —
     // otherwise the old amount stays baked into the balance forever.
-    const oldTx = state.cfTransactions.find(t=>t.id===editTxId);
+    const oldTx = state.cfTransactions.find(t=>t.id===state.editTxId);
     if(oldTx) await reverseBalanceChange(oldTx.type, Number(oldTx.amount), oldTx.holding_id, oldTx.holding_to_id);
     await applyBalanceChange(state.cfType, amount, fromId, state.cfType==='transfer'?toId:null);
 
-    await api(`cashflow_transactions?id=eq.${editTxId}`,{method:'PATCH',body:JSON.stringify({
+    await api(`cashflow_transactions?id=eq.${state.editTxId}`,{method:'PATCH',body:JSON.stringify({
       type:state.cfType, amount, description:desc||null, category_id:state.cfType==='transfer'?null:catId,
       holding_id:fromId, holding_to_id:state.cfType==='transfer'?toId:null,
       date:new Date(date).toISOString()
     })});
-    editTxId=null;
+    state.editTxId=null;
     [state.cfTransactions,state.holdings]=await Promise.all([api('cashflow_transactions?order=date.desc'),api('holdings?order=created_at.asc')]);
     renderCashflow(); renderOverview(); showCfMain(); toast('Transaction updated ✓');
     // Restore form title and recurring option
@@ -680,7 +681,7 @@ Proceed anyway?`)) return;
   }
   await api('cashflow_transactions',{method:'POST',body:JSON.stringify(txData)});
   await applyBalanceChange(state.cfType,amount,fromId,state.cfType==='transfer'?toId:null);
-  [state.cfTransactions,cfRecurrences,state.holdings]=await Promise.all([api('cashflow_transactions?order=date.desc'),api('recurrences?order=next_due.asc'),api('holdings?order=created_at.asc')]);
+  [state.cfTransactions, state.cfRecurrences, state.holdings]=await Promise.all([api('cashflow_transactions?order=date.desc'),api('recurrences?order=next_due.asc'),api('holdings?order=created_at.asc')]);
   state.holdings = await api('holdings?order=created_at.asc');
   renderCashflow(); renderSettings(); renderHoldings(); renderOverview();
   showCfMain(); toast('Transaction saved ✓');
@@ -741,7 +742,7 @@ export function editCfTx(txId){
     return;
   }
 
-  editTxId = txId;
+  state.editTxId = txId;
 
   // Open the form
   document.getElementById('cf-main').style.display='none';
@@ -840,6 +841,7 @@ exposeLegacyFunctions({
   toggleCfAccount,
   allTxDateSummary,
   toggleAllTxDateFilter,
+  updateAllTxDateField,
   toggleAllTxSearch,
   closeAllTxSearch,
   onAllTxSearch,

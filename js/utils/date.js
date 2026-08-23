@@ -1,3 +1,5 @@
+import { exposeLegacyFunctions } from '../utils/legacy.js';
+
 export function fmt(n) {
   const num = Number(n);
   const decimals = Math.abs(num) > 0 && Math.abs(num) < 1 ? 4 : 2;
@@ -33,3 +35,17 @@ export function isoToday() {
   const t = new Date();
   return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
 }
+
+
+// ─────────────────────────────────────────────
+// Legacy inline-HTML compatibility
+// ─────────────────────────────────────────────
+exposeLegacyFunctions({
+  fmt,
+  fmtN,
+  fmtPct,
+  fmtShort,
+  fmtDateDDMMYYYY,
+  fmtDateTimeDDMMYYYY,
+  isoToday
+});

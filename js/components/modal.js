@@ -1,5 +1,7 @@
 // components/modal.js
 
+import { exposeLegacyFunctions } from '../utils/legacy.js';
+
 export function openModal(id) {
   document.getElementById(id).classList.add('open');
 
@@ -103,11 +105,14 @@ function showDialog(
 }
 
 
+
 // ─────────────────────────────────────────────
 // Legacy inline-HTML compatibility
 // ─────────────────────────────────────────────
-window.openModal = openModal;
-window.closeModal = closeModal;
-window.showAlert = showAlert;
-window.showConfirm = showConfirm;
-window.toast = toast;
+exposeLegacyFunctions({
+  openModal,
+  closeModal,
+  showAlert,
+  showConfirm,
+  toast
+});

@@ -1,3 +1,5 @@
+import { exposeLegacyFunctions } from './utils/legacy.js';
+
 export const state = {
   holdings: [],
 
@@ -26,5 +28,36 @@ export const state = {
   bulkSelectMode: false,
   selectedTxIds: new Set(),
   cfOpenTypes: new Set(),
-  rptFilterYear: 'all'
+  rptFilterYear: 'all',
+
+  editTxId : null,
+  allTxHoldingId: null,
+  allTxFilter: 'all',
+  allTxFrom: '',
+  allTxTo: '',
+  allTxDateFilterOpen: false,
+  allTxSearchQuery: '',
 };
+
+export function getAllTxFrom(){
+  return state.allTxFrom;
+}
+
+export function getAllTxTo(){
+  return state.allTxTo;
+}
+
+export function setAllTxFrom(value){
+  state.allTxFrom = value;
+}
+
+export function setAllTxTo(value){
+  state.allTxTo = value;
+}
+
+exposeLegacyFunctions({
+  getAllTxFrom,
+  getAllTxTo,
+  setAllTxFrom,
+  setAllTxTo,
+});
