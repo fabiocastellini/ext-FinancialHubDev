@@ -99,4 +99,5 @@ exposeLegacyFunctions(
   openInvPaidFromPicker,
   openInvSaleToPicker,
   openInvExpIncAcctPicker,
+  openInvCatPicker,
 });

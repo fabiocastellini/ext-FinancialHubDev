@@ -18,7 +18,6 @@ import { renderOverview } from './features/overview.js'
 // ── Settings ──
 let recurCalYear = new Date().getFullYear();
 let recurCalMonth = new Date().getMonth();
-let categoryDetailId;
 
 export function showSettingsMain(){
   document.getElementById('settings-main').style.display='';
@@ -260,7 +259,7 @@ export function updateIconPreview(icon){
 }
 
 export function openCatDetailModal(id){
-  categoryDetailId = id;
+  state.categoryDetailId = id;
   const cat = state.cfCategories.find(c=>c.id===id);
   if(!cat) return;
   document.getElementById('catdetail-icon').innerHTML = `<i class="ti ${cat.icon}"></i>`;
@@ -282,7 +281,7 @@ export function openCatDetailModal(id){
 export async function deleteCatFromDetail(id){
   await deleteCat(id);
   // Keep the detail window open and refreshed, unless the parent itself no longer exists
-  if(state.cfCategories.find(c=>c.id===categoryDetailId)) openCatDetailModal(categoryDetailId);
+  if(state.cfCategories.find(c=>c.id === state.categoryDetailId)) openCatDetailModal(state.categoryDetailId);
   else closeModal('modal-cat-detail');
 }
 
@@ -366,9 +365,9 @@ export async function saveCat(){
   toast(editId?'Category updated ✓':'Category saved ✓');
 
   // If this category was created from the Add Transaction category picker, select it right away
-  if(newCatId && catCreateTargetField){
-    const field = catCreateTargetField;
-    catCreateTargetField = null;
+  if(newCatId && state.catCreateTargetField){
+    const field = state.catCreateTargetField;
+    state.catCreateTargetField = null;
     const cat = state.cfCategories.find(c=>c.id===newCatId);
     const labelId = field+'-label', triggerId = field+'-trigger', iconId = field+'-icon';
     document.getElementById(field).value = newCatId;

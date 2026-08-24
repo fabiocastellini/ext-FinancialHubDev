@@ -193,7 +193,7 @@ function renderLiquidityChart(){
 }
 
 // ── Monthly income vs outcomes (year-filtered) ──
-function renderMonthlyChart(){
+export function renderMonthlyChart(){
   const el=document.getElementById('monthly-chart'); if(!el) return;
   const allPeriods=buildSalaryPeriods();
   const periods=insightsYear ? allPeriods.filter(p=>p.start.getFullYear()===insightsYear||p.end.getFullYear()===insightsYear) : allPeriods;
@@ -651,7 +651,7 @@ function getRptTransactions(){
   return state.cfTransactions.filter(t=>new Date(t.date).getFullYear()===Number(rptFilterYear));
 }
 
-function renderReports(){
+export function renderReports(){
   populateRptYearSel();
   renderCashflowReport();
   renderIncomesReport();
@@ -924,7 +924,7 @@ function renderAssetReport(type){
 // ─────────────────────────────────────────
 // SNAPSHOTS & RESTORE
 // ─────────────────────────────────────────
-async function loadSnapshots(){
+export async function loadSnapshots(){
   const el = document.getElementById('snapshots-list'); if(!el) return;
   el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:0.5rem 0"><span class="spin" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin-right:6px"></span>Loading…</div>';
   try{
@@ -951,7 +951,7 @@ async function loadSnapshots(){
   }
 }
 
-async function restoreSnapshot(id, date){
+export async function restoreSnapshot(id, date){
   if(!await showConfirm(`Restore to snapshot from ${date}?\n\nThis will REPLACE all current data. This cannot be undone.\n\nProceed?`)) return;
   showSnapshotStatus('<span class="spin" style="width:14px;height:14px;display:inline-block;vertical-align:middle;margin-right:6px"></span> Restoring from '+date+'…', 'info');
   try{
@@ -1105,8 +1105,10 @@ setInterval(updateFooterTime,60000);
 exposeLegacyFunctions({
   renderInsights,
   toggleYearDropdown,
+  renderMonthlyChart,
   openRptYearPicker,
   renderAllocation,
   renderReports,
   restoreSnapshot,
+  loadSnapshots,
 });

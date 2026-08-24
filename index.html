@@ -706,7 +706,7 @@
       <div id="cat-icon-grid" style="display:grid;grid-template-columns:repeat(10,1fr);gap:3px;max-height:180px;overflow-y:auto;background:var(--surface2);border-radius:var(--radius-sm);padding:6px"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn" onclick="catCreateTargetField=null;closeModal('modal-cat')">Cancel</button>
+      <button class="btn" onclick="setCatCreateTargetField(null);closeModal('modal-cat')">Cancel</button>
       <button class="btn btn-primary" onclick="saveCat()">Save</button>
     </div>
   </div>
@@ -726,7 +726,7 @@
     <div id="catdetail-sublist" style="max-height:45vh;overflow-y:auto;margin-bottom:1rem"></div>
     <div class="modal-footer" style="justify-content:space-between">
       <button class="btn" onclick="closeModal('modal-cat-detail')">Close</button>
-      <button class="btn btn-primary" onclick="closeModal('modal-cat-detail');openCategoryModal(null,categoryDetailId)"><i class="ti ti-plus"></i> Add subcategory</button>
+      <button class="btn btn-primary" onclick="closeModal('modal-cat-detail');openCategoryModal(null,getCategoryDetailId())"><i class="ti ti-plus"></i> Add subcategory</button>
     </div>
   </div>
 </div>
