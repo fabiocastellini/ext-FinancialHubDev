@@ -392,9 +392,23 @@ export function renderAllocation(){
   const dimColor=dark?'#94a3b8':'#6b7280';
   const total=state.holdings.reduce((s,h)=>s+getVal(h),0)||1;
 
+  // Funds don't get their own asset-class bucket in these two charts —
+  // each fund's value is split into Stock/Bond via stock_pct/bond_pct and
+  // folded into those buckets instead.
+  const splitFundInto=(bucket,h)=>{
+    const val=getVal(h);
+    const stockPct=h.stock_pct ?? 100;
+    const bondPct=h.bond_pct ?? 0;
+    bucket['stock']=(bucket['stock']||0)+val*stockPct/100;
+    bucket['bond']=(bucket['bond']||0)+val*bondPct/100;
+  };
+
   // By asset type — all holdings
   const byType={};
-  state.holdings.forEach(h=>{ byType[h.type]=(byType[h.type]||0)+getVal(h); });
+  state.holdings.forEach(h=>{
+    if(h.type==='fund') splitFundInto(byType,h);
+    else byType[h.type]=(byType[h.type]||0)+getVal(h);
+  });
   const typeSlices=Object.keys(byType).map(k=>({label:TYPE_LABELS[k]||k,value:byType[k],color:TYPE_COLORS[k]||'#888'}));
   renderDonutSVG('alloc-type-container', typeSlices, total, textColor, dimColor);
 
@@ -403,9 +417,12 @@ export function renderAllocation(){
   const invHoldings=state.holdings.filter(h=>invTypes.includes(h.type));
   const invTotal=invHoldings.reduce((s,h)=>s+getVal(h),0)||1;
 
-  // By investment family
+  // By investment family — same stock/bond fund split applied here too
   const byFamily={};
-  invHoldings.forEach(h=>{ byFamily[h.type]=(byFamily[h.type]||0)+getVal(h); });
+  invHoldings.forEach(h=>{
+    if(h.type==='fund') splitFundInto(byFamily,h);
+    else byFamily[h.type]=(byFamily[h.type]||0)+getVal(h);
+  });
   const familySlices=Object.keys(byFamily).map(k=>({label:TYPE_LABELS[k]||k,value:byFamily[k],color:TYPE_COLORS[k]||'#888'}));
   if(familySlices.length){
     renderDonutSVG('alloc-family-container', familySlices, invTotal, textColor, dimColor);
@@ -426,20 +443,50 @@ export function renderAllocation(){
     if(c) c.innerHTML='<div class="empty" style="padding:2rem"><i class="ti ti-briefcase"></i><p>No investment holdings yet</p></div>';
   }
 
-  // Per-type breakdown charts (only for types with >1 holding)
+  // Per-type breakdown charts (only for types with >1 slice).
+  // 'stock' and 'bond' also fold in each fund's proportional stock/bond
+  // contribution (via stock_pct/bond_pct), so a fund shows up inside both
+  // the Stock and Bond composition cards, on top of its own Fund card.
   const breakdownContainer=document.getElementById('alloc-type-breakdowns');
   if(breakdownContainer){
     const typeGroups={};
     invHoldings.forEach(h=>{ if(!typeGroups[h.type]) typeGroups[h.type]=[]; typeGroups[h.type].push(h); });
-    const typesWithMultiple=Object.keys(typeGroups).filter(t=>typeGroups[t].length>1);
+    const fundHoldings=typeGroups['fund']||[];
 
-    if(!typesWithMultiple.length){
+    const holdingSlice=(h,color)=>({
+      label:h.type==='crypto'?cleanCryptoTicker(h.ticker):h.ticker.toUpperCase(),
+      value:getVal(h),
+      color
+    });
+
+    // Builds the slice list for a given breakdown card, offsetting palette
+    // indices by `offset` so colors don't repeat across cards.
+    const buildSlices=(type,offset)=>{
+      const direct=(typeGroups[type]||[]).map((h,i)=>holdingSlice(h,PALETTE[(offset+i)%PALETTE.length]));
+      if(type!=='stock'&&type!=='bond') return direct;
+      const pctKey=type==='stock'?'stock_pct':'bond_pct';
+      const defaultPct=type==='stock'?100:0;
+      const fundSlices=fundHoldings.map((h,i)=>{
+        const pct=h[pctKey] ?? defaultPct;
+        return {
+          label:`${h.ticker.toUpperCase()} (fund)`,
+          value:getVal(h)*pct/100,
+          color:PALETTE[(offset+direct.length+i)%PALETTE.length]
+        };
+      }).filter(s=>s.value>0);
+      return [...direct, ...fundSlices];
+    };
+
+    const breakdownOrder=['stock','fund','bond','etf','crypto'];
+    const typesToShow=breakdownOrder.filter(type=>buildSlices(type,0).length>1);
+
+    if(!typesToShow.length){
       breakdownContainer.innerHTML='';
     } else {
-      const perRow=window.innerWidth<=768?1:Math.min(typesWithMultiple.length,3);
+      const perRow=window.innerWidth<=768?1:Math.min(typesToShow.length,3);
       const gridCols=perRow===1?'1fr':perRow===2?'1fr 1fr':'1fr 1fr 1fr';
       let html=`<div class="ins-section-title" style="margin-top:0.5rem">Asset type breakdown</div><div style="display:grid;grid-template-columns:${gridCols};gap:1rem">`;
-      typesWithMultiple.forEach(type=>{
+      typesToShow.forEach(type=>{
         const containerId=`alloc-breakdown-${type}`;
         html+=`<div class="card">
           <div class="card-title" style="margin-bottom:0.5rem">${TYPE_LABELS[type]||type} composition</div>
@@ -451,15 +498,10 @@ export function renderAllocation(){
       html+='</div>';
       breakdownContainer.innerHTML=html;
       // Render each breakdown chart
-      typesWithMultiple.forEach((type,ti)=>{
-        const grpHoldings=typeGroups[type];
-        const grpTotal=grpHoldings.reduce((s,h)=>s+getVal(h),0)||1;
+      typesToShow.forEach((type,ti)=>{
+        const slices=buildSlices(type,ti*4);
+        const grpTotal=slices.reduce((s,sl)=>s+sl.value,0)||1;
         const containerId=`alloc-breakdown-${type}`;
-        const slices=grpHoldings.map((h,i)=>({
-          label:h.type==='crypto'?cleanCryptoTicker(h.ticker):h.ticker.toUpperCase(),
-          value:getVal(h),
-          color:PALETTE[(ti*4+i)%PALETTE.length]
-        }));
         renderDonutSVG(containerId, slices, grpTotal, textColor, dimColor);
       });
     }
