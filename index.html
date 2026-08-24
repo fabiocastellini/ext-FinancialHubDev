@@ -758,6 +758,20 @@
         </button>
         <input type="hidden" id="h-div-stock">
       </div>
+      <!-- Fund allocation fields -->
+      <div class="form-group form-full" id="h-fund-wrap" style="display:none">
+        <label>Asset Allocation (%)</label>
+        <div style="display:flex;gap:10px">
+          <div style="flex:1">
+            <label style="font-size:11px;color:var(--text2)">Stocks %</label>
+            <input type="number" inputmode="decimal" id="h-fund-stock" placeholder="100" min="0" max="100" value="100" oninput="updateFundBreakdown('stock')">
+          </div>
+          <div style="flex:1">
+            <label style="font-size:11px;color:var(--text2)">Bonds %</label>
+            <input type="number" inputmode="decimal" id="h-fund-bond" placeholder="0" min="0" max="100" value="0" oninput="updateFundBreakdown('bond')">
+          </div>
+        </div>
+      </div>
       <!-- Investment fields -->
       <div class="form-group form-full" id="h-ticker-wrap" style="display:none">
         <label>Search asset</label>
