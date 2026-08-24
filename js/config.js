@@ -1,7 +1,34 @@
-export const SUPABASE_URL = 'https://lwkkuoauvvfrwboasxbi.supabase.co';
-export const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3a2t1b2F1dnZmcndib2FzeGJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzMTQ3MzksImV4cCI6MjEwMDg5MDczOX0.Lg_pCz7gG3Qa5pfZgDmhzjn2fiHz7EUuT85O5SFXb54';
-export const APP_ENV = 'dev';
-export const APP_SECRET = 'zW32WdZ6sjemsWkQqXUc4Fvfa6TxtvIq6H63FsKYdzc';
+async function loadLocalEnv() {
+  try {
+    const res = await fetch('./env.json');
+    if (!res.ok) return {};
+    return await res.json();
+  } catch {
+    return {};
+  }
+}
+
+const localEnv = await loadLocalEnv();
+
+export const SUPABASE_URL = 
+  localEnv.VITE_SUPABASE_URL ||
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) ||
+  'https://lwkkuoauvvfrwboasxbi.supabase.co';
+
+export const SUPABASE_KEY = 
+  localEnv.VITE_SUPABASE_KEY ||
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_KEY) ||
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3a2t1b2F1dnZmcndib2FzeGJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzMTQ3MzksImV4cCI6MjEwMDg5MDczOX0.Lg_pCz7gG3Qa5pfZgDmhzjn2fiHz7EUuT85O5SFXb54';
+
+// Was missing entirely — insights.js (restoreSnapshot) imports APP_SECRET
+// from this file, and a missing named export is a hard SyntaxError in
+// native ES modules, which breaks the whole import chain, not just this file.
+export const APP_SECRET =
+  localEnv.VITE_APP_SECRET ||
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_APP_SECRET) ||
+  'zW32WdZ6sjemsWkQqXUc4Fvfa6TxtvIq6H63FsKYdzc';
+
+export const APP_ENV = localEnv.VITE_APP_ENV || 'dev';
 
 export const TYPE_LABELS = { bank: 'Bank', bond: 'Bond', cash: 'Cash', crypto: 'Crypto', dividend: 'Dividends', etf: 'ETF', fund: 'Fund', stock: 'Stock' };
 export const TYPE_ICONS  = { bank: 'ti-building-bank', bond: 'ti-certificate', cash: 'ti-cash', crypto: 'ti-currency-bitcoin', dividend: 'ti-coin', etf: 'ti-trending-up', fund: 'ti-chart-pie', stock: 'ti-chart-candle' };
@@ -30,7 +57,6 @@ export const DEFAULT_CASHFLOW_CATEGORIES=[
   {name:'Investment',icon:'ti-trending-up',color:'#0ea5e9'},
 ];
 
-// Extra categories from Excel that might be missing
 export const EXTRA_CASHFLOW_CATEGORIES = [
   {name:'Fixed',           icon:'ti-file-invoice',    color:'#6366f1'},
   {name:'Food & Drinks',   icon:'ti-tools-kitchen-2', color:'#f59e0b'},
@@ -43,7 +69,6 @@ export const EXTRA_CASHFLOW_CATEGORIES = [
   {name:'Tech',            icon:'ti-device-laptop',   color:'#3b82f6'},
   {name:'Trips',           icon:'ti-plane',           color:'#f97316'},
 ];
-
 
 export const CF_FREQ_OPTIONS = [
   { value: 'daily',   label: 'Daily' },
