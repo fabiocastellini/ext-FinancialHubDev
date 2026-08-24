@@ -1,4 +1,4 @@
-import { H_TYPE_OPTIONS, TYPE_LABELS, TYPE_ICONS, APP_ENV } from '../config.js';
+import { H_TYPE_OPTIONS, TYPE_LABELS, TYPE_COLORS, TYPE_ICONS, APP_ENV } from '../config.js';
 
 import { exposeLegacyFunctions } from '../utils/legacy.js';
 import { loadAll } from '../app.js';
@@ -42,7 +42,6 @@ export function renderHoldings(){
   const byType = {};
   state.holdings.forEach(h=>{ if(!byType[h.type]) byType[h.type]=[]; byType[h.type].push(h); });
   const totalPortfolio = state.holdings.reduce((s,h)=>s+getVal(h),0)||1;
-  const typeColorMap = {bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',dividend:'#60a8f5',etf:'#10b981',stock:'#6366f1'};
 
   // Sort categories alphabetically
   const sortedTypes = Object.keys(byType).sort((a,b)=>(TYPE_LABELS[a]||a).localeCompare(TYPE_LABELS[b]||b));
@@ -52,7 +51,7 @@ export function renderHoldings(){
     const items = byType[type];
     const catTotal = items.reduce((s,h)=>s+getVal(h),0);
     const catPct   = (catTotal/totalPortfolio*100).toFixed(1);
-    const color    = typeColorMap[type]||'#888';
+    const color    = TYPE_COLORS[type]||'#888';
     const icon     = TYPE_ICONS[type]||'ti-wallet';
     const isSimple = type==='bank'||type==='cash'||type==='dividend';
 
@@ -125,8 +124,7 @@ export function renderCategoryDetail(type){
   if(!container) return;
   const items = state.holdings.filter(h=>h.type===type);
   if(!items.length){ closeCategoryDetail(); return; }
-  const typeColorMap = {bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',dividend:'#60a8f5',etf:'#10b981',stock:'#6366f1'};
-  const color = typeColorMap[type]||'#888';
+  const color = TYPE_COLORS[type]||'#888';
   const icon = TYPE_ICONS[type]||'ti-wallet';
   const isSimple = type==='bank'||type==='cash'||type==='dividend';
   const totalPortfolio = state.holdings.reduce((s,h)=>s+getVal(h),0)||1;

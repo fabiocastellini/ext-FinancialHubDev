@@ -44,10 +44,9 @@ export function setTriggerIcon(iconId, icon, color) {
 }
 
 export function accountOptionsList() {
-  const typeColorMap = { bank: '#0ea5e9', bond: '#ec4899', cash: '#84cc16', crypto: '#f59e0b', dividend: '#60a8f5', etf: '#10b981', stock: '#6366f1' };
   return state.holdings.map(h => {
     const n = h.type === 'crypto' ? cleanCryptoName(h.name || h.ticker) : (h.name || h.ticker);
-    return { value: h.id, label: `${n} (${TYPE_LABELS[h.type] || h.type})`, icon: TYPE_ICONS[h.type], color: typeColorMap[h.type] };
+    return { value: h.id, label: `${n} (${TYPE_LABELS[h.type] || h.type})`, icon: TYPE_ICONS[h.type], color: TYPE_COLORS[h.type] };
   });
 }
 

@@ -1,16 +1,15 @@
 import { state } from '../state.js';
 import { exposeLegacyFunctions } from '../utils/legacy.js';
-import { TYPE_LABELS, TYPE_ICONS } from '../config.js';
+import { TYPE_LABELS, TYPE_ICONS, TYPE_COLORS } from '../config.js';
 import { cleanCryptoName } from '../utils/calculations.js';
 import { openSelectPicker, setTriggerIcon, accountOptionsList, buildCategoryPickerOptions, catDisplayLabel } from '../components/select-picker.js';
 import { closeModal } from '../components/modal.js';
 
 export function invAssetOptionsList() {
-  const investHoldings = state.holdings.filter(h => ['stock', 'etf', 'crypto', 'bond'].includes(h.type));
-  const typeColorMap = { bond: '#ec4899', crypto: '#f59e0b', etf: '#10b981', stock: '#6366f1' };
+  const investHoldings = state.holdings.filter(h => ['stock', 'etf', 'crypto', 'bond', 'fund'].includes(h.type));
   return investHoldings.map(h => {
     const n = h.type === 'crypto' ? cleanCryptoName(h.name || h.ticker) : (h.name || h.ticker);
-    return { value: h.id, label: `${n} (${h.ticker})`, icon: TYPE_ICONS[h.type], color: typeColorMap[h.type] };
+    return { value: h.id, label: `${n} (${h.ticker})`, icon: TYPE_ICONS[h.type], color: TYPE_COLORS[h.type] };
   });
 }
 
@@ -28,10 +27,9 @@ export function openInvAssetPicker() {
 
 export function invCounterpartOptionsList() {
   const selectedId = document.getElementById('inv-asset').value;
-  const typeColorMap = { bank: '#0ea5e9', bond: '#ec4899', cash: '#84cc16', crypto: '#f59e0b', dividend: '#60a8f5', etf: '#10b981', stock: '#6366f1' };
   return state.holdings.filter(h => h.id !== selectedId).map(h => {
     const n = h.type === 'crypto' ? cleanCryptoName(h.name || h.ticker) : (h.name || h.ticker);
-    return { value: h.id, label: `${n} (${TYPE_LABELS[h.type] || h.type})`, icon: TYPE_ICONS[h.type], color: typeColorMap[h.type] };
+    return { value: h.id, label: `${n} (${TYPE_LABELS[h.type] || h.type})`, icon: TYPE_ICONS[h.type], color: TYPE_COLORS[h.type] };
   });
 }
 

@@ -1,6 +1,6 @@
 import { exposeLegacyFunctions } from '../utils/legacy.js';
 
-import { TYPE_LABELS, TYPE_ICONS, PALETTE } from '../config.js';
+import { TYPE_LABELS, TYPE_COLORS, PALETTE, EXTRA_CASHFLOW_CATEGORIES } from '../config.js';
 
 import { api } from '../api.js';
 
@@ -390,11 +390,10 @@ export function renderAllocation(){
   const dimColor=dark?'#94a3b8':'#6b7280';
   const total=state.holdings.reduce((s,h)=>s+getVal(h),0)||1;
 
-  const typeColorMap={bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',dividend:'#60a8f5',etf:'#10b981',stock:'#6366f1'};
   // By asset type — all holdings
   const byType={};
   state.holdings.forEach(h=>{ byType[h.type]=(byType[h.type]||0)+getVal(h); });
-  const typeSlices=Object.keys(byType).map(k=>({label:TYPE_LABELS[k]||k,value:byType[k],color:typeColorMap[k]||'#888'}));
+  const typeSlices=Object.keys(byType).map(k=>({label:TYPE_LABELS[k]||k,value:byType[k],color:TYPE_COLORS[k]||'#888'}));
   renderDonutSVG('alloc-type-container', typeSlices, total, textColor, dimColor);
 
   // By holding — investments only (stocks, ETFs, crypto, bonds)
@@ -406,7 +405,7 @@ export function renderAllocation(){
   // by asset type (crypto/etf/stock/bond) rather than by individual asset.
   const byFamily={};
   invHoldings.forEach(h=>{ byFamily[h.type]=(byFamily[h.type]||0)+getVal(h); });
-  const familySlices=Object.keys(byFamily).map(k=>({label:TYPE_LABELS[k]||k,value:byFamily[k],color:typeColorMap[k]||'#888'}));
+  const familySlices=Object.keys(byFamily).map(k=>({label:TYPE_LABELS[k]||k,value:byFamily[k],color:TYPE_COLORS[k]||'#888'}));
   if(familySlices.length){
     renderDonutSVG('alloc-family-container', familySlices, invTotal, textColor, dimColor);
   } else {
@@ -588,24 +587,10 @@ export function openRptYearPicker() {
   });
 }
 
-// Extra categories from Excel that might be missing
-const EXTRA_CATS = [
-  {name:'Fixed',           icon:'ti-file-invoice',    color:'#6366f1'},
-  {name:'Food & Drinks',   icon:'ti-tools-kitchen-2', color:'#f59e0b'},
-  {name:'Groceries',       icon:'ti-shopping-cart',   color:'#84cc16'},
-  {name:'House',           icon:'ti-home-2',          color:'#0ea5e9'},
-  {name:'Events',          icon:'ti-confetti',        color:'#ec4899'},
-  {name:'Hobby',           icon:'ti-device-gamepad-2',color:'#8b5cf6'},
-  {name:'Other',           icon:'ti-dots',            color:'#9ca3af'},
-  {name:'Sport',           icon:'ti-ball-football',   color:'#10b981'},
-  {name:'Tech',            icon:'ti-device-laptop',   color:'#3b82f6'},
-  {name:'Trips',           icon:'ti-plane',           color:'#f97316'},
-];
-
 export async function ensureExtraCategories(){
   const existing = state.cfCategories.map(c=>c.name.toLowerCase());
   let added = false;
-  for(const cat of EXTRA_CATS){
+  for(const cat of EXTRA_CASHFLOW_CATEGORIES){
     if(!existing.includes(cat.name.toLowerCase())){
       try{
         const r = await api('cashflow_categories',{method:'POST',body:JSON.stringify(cat)});
