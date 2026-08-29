@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Added CHANGELOG and .gitignore files (!1) @fabio.castellini
+- Added CHANGELOG and .gitignore files (!3) @fabio.castellini
 
 ### Fixed
 - 
