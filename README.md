@@ -38,6 +38,38 @@ financial-hub/
         ├── insights.js       # Portfolio insights & analytics
         └── export.js         # Data export functionality
 ```
+# Link the WebApp to your Supabase database
+
+The app runs as plain static files (no build step), so it can't read
+environment variables directly — browsers have no access to those. Instead,
+`config.js` fetches a local `env.json` file at startup and reads your values
+from there.
+
+`env.json` must live in the same folder as `index.html` (the folder your dev
+server serves from), and it's already git-ignored so your keys never get
+committed.
+
+## Create `env.json`
+
+In the project root (the folder containing `index.html`), create a file
+named `env.json` with your values:
+
+```json
+{
+  "VITE_SUPABASE_URL": "https://your-custom-project.supabase.co",
+  "VITE_SUPABASE_KEY": "sb_publishable_your_custom_key_here",
+  "VITE_APP_SECRET": "your_app_secret_here"
+}
+```
+
+`VITE_APP_SECRET` is optional — omit it (or leave it as an empty string) if
+you don't use it.
+
+## Verify
+
+Start your local server (e.g. VS Code Live Server) and open the app.
+In the browser's Network tab, confirm `env.json` returns `200` — if it's
+`404`, the file isn't in the same folder as `index.html`.
 
 # TODOs
 - Add documentation about WebApp setup/run

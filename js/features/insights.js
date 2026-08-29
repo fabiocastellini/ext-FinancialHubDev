@@ -1,6 +1,6 @@
 import { exposeLegacyFunctions } from '../utils/legacy.js';
 
-import { TYPE_LABELS, TYPE_ICONS, PALETTE } from '../config.js';
+import { TYPE_LABELS, TYPE_COLORS, PALETTE, EXTRA_CASHFLOW_CATEGORIES } from '../config.js';
 
 import { api } from '../api.js';
 
@@ -12,8 +12,8 @@ import { state } from '../state.js';
 import { openSelectPicker } from '../components/select-picker.js';
 
 import { showPage } from '../features/navigation.js';
-import { renderOverview } from '../features/overview.js'
-import { loadCashflow } from '../features/cashflow.js'
+import { renderOverview } from '../features/overview.js';
+import { loadCashflow } from '../features/cashflow.js';
 
 import { refreshPrices, refreshHoldingsViews } from '../data/holdings.js';
 
@@ -23,6 +23,7 @@ import { loadAll } from '../app.js';
 
 let holdings=[], transactions=[], prices={}, snapshots=[], transactionFilter='all', activePeriod=30;
 let trendChart, liquidityChart, monthlyChart, yearlyIncomeChart, yearlyOutcomeChart, savingsChart, investedChart;
+
 // Use app font in all Chart.js charts
 if(typeof Chart!=='undefined'){
   Chart.defaults.font.family="'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif";
@@ -292,7 +293,7 @@ function renderYearlyCharts(){
       x:{grid:{color:c.grid},ticks:{color:c.text,font:{size:isMobNow?8:10},callback:v=>fmtShort(v),maxTicksLimit:isMobNow?4:8},grace:'15%'},
       y:{grid:{display:false},ticks:{color:c.text,font:{size:isMobNow?9:11}}}
     }
-  });
+  });  
   // Dynamic height: each year needs ~40px, minimum 130px
   const dynH = Math.max(130, years.length * 42);
   const iWrap = document.getElementById('yearly-income-wrap');
@@ -383,6 +384,7 @@ function renderInvestedChart(){
     options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:16,bottom:4}},plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>fmt(ctx.raw)},backgroundColor:c.surface,titleColor:c.text,bodyColor:c.text,borderColor:c.border,borderWidth:1}},layout:{padding:{top:16,right:window.innerWidth<=768?36:20,bottom:8}},scales:{x:{grid:{display:false},ticks:{color:c.text,font:{size:9},maxRotation:0,minRotation:0,maxTicksLimit:8}},y:{grid:{color:c.grid},ticks:{color:c.text,font:{size:10},callback:v=>fmtShort(v)}}}}
   });
 }
+
 // ── ALLOCATION ──
 export function renderAllocation(){
   const dark=window.matchMedia('(prefers-color-scheme:dark)').matches;
@@ -390,23 +392,38 @@ export function renderAllocation(){
   const dimColor=dark?'#94a3b8':'#6b7280';
   const total=state.holdings.reduce((s,h)=>s+getVal(h),0)||1;
 
-  const typeColorMap={bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',dividend:'#60a8f5',etf:'#10b981',stock:'#6366f1'};
+  // Funds don't get their own asset-class bucket in these two charts —
+  // each fund's value is split into Stock/Bond via stock_pct/bond_pct and
+  // folded into those buckets instead.
+  const splitFundInto=(bucket,h)=>{
+    const val=getVal(h);
+    const stockPct=h.stock_pct ?? 100;
+    const bondPct=h.bond_pct ?? 0;
+    bucket['stock']=(bucket['stock']||0)+val*stockPct/100;
+    bucket['bond']=(bucket['bond']||0)+val*bondPct/100;
+  };
+
   // By asset type — all holdings
   const byType={};
-  state.holdings.forEach(h=>{ byType[h.type]=(byType[h.type]||0)+getVal(h); });
-  const typeSlices=Object.keys(byType).map(k=>({label:TYPE_LABELS[k]||k,value:byType[k],color:typeColorMap[k]||'#888'}));
+  state.holdings.forEach(h=>{
+    if(h.type==='fund') splitFundInto(byType,h);
+    else byType[h.type]=(byType[h.type]||0)+getVal(h);
+  });
+  const typeSlices=Object.keys(byType).map(k=>({label:TYPE_LABELS[k]||k,value:byType[k],color:TYPE_COLORS[k]||'#888'}));
   renderDonutSVG('alloc-type-container', typeSlices, total, textColor, dimColor);
 
-  // By holding — investments only (stocks, ETFs, crypto, bonds)
-  const invTypes=['stock','etf','crypto','bond'];
+  // By holding — investments only (stocks, ETFs, crypto, bonds, funds)
+  const invTypes=['stock','etf','crypto','bond','fund'];
   const invHoldings=state.holdings.filter(h=>invTypes.includes(h.type));
   const invTotal=invHoldings.reduce((s,h)=>s+getVal(h),0)||1;
 
-  // By investment family — same investment-only scope as the chart above, but grouped
-  // by asset type (crypto/etf/stock/bond) rather than by individual asset.
+  // By investment family — same stock/bond fund split applied here too
   const byFamily={};
-  invHoldings.forEach(h=>{ byFamily[h.type]=(byFamily[h.type]||0)+getVal(h); });
-  const familySlices=Object.keys(byFamily).map(k=>({label:TYPE_LABELS[k]||k,value:byFamily[k],color:typeColorMap[k]||'#888'}));
+  invHoldings.forEach(h=>{
+    if(h.type==='fund') splitFundInto(byFamily,h);
+    else byFamily[h.type]=(byFamily[h.type]||0)+getVal(h);
+  });
+  const familySlices=Object.keys(byFamily).map(k=>({label:TYPE_LABELS[k]||k,value:byFamily[k],color:TYPE_COLORS[k]||'#888'}));
   if(familySlices.length){
     renderDonutSVG('alloc-family-container', familySlices, invTotal, textColor, dimColor);
   } else {
@@ -426,24 +443,50 @@ export function renderAllocation(){
     if(c) c.innerHTML='<div class="empty" style="padding:2rem"><i class="ti ti-briefcase"></i><p>No investment holdings yet</p></div>';
   }
 
-  // Per-type breakdown charts (only for types with >1 holding)
+  // Per-type breakdown charts (only for types with >1 slice).
+  // 'stock' and 'bond' also fold in each fund's proportional stock/bond
+  // contribution (via stock_pct/bond_pct), so a fund shows up inside both
+  // the Stock and Bond composition cards, on top of its own Fund card.
   const breakdownContainer=document.getElementById('alloc-type-breakdowns');
   if(breakdownContainer){
     const typeGroups={};
     invHoldings.forEach(h=>{ if(!typeGroups[h.type]) typeGroups[h.type]=[]; typeGroups[h.type].push(h); });
-    const typesWithMultiple=Object.keys(typeGroups).filter(t=>typeGroups[t].length>1);
-    const typesSingle=Object.keys(typeGroups).filter(t=>typeGroups[t].length===1);
+    const fundHoldings=typeGroups['fund']||[];
 
-    if(!typesWithMultiple.length){
+    const holdingSlice=(h,color)=>({
+      label:h.type==='crypto'?cleanCryptoTicker(h.ticker):h.ticker.toUpperCase(),
+      value:getVal(h),
+      color
+    });
+
+    // Builds the slice list for a given breakdown card, offsetting palette
+    // indices by `offset` so colors don't repeat across cards.
+    const buildSlices=(type,offset)=>{
+      const direct=(typeGroups[type]||[]).map((h,i)=>holdingSlice(h,PALETTE[(offset+i)%PALETTE.length]));
+      if(type!=='stock'&&type!=='bond') return direct;
+      const pctKey=type==='stock'?'stock_pct':'bond_pct';
+      const defaultPct=type==='stock'?100:0;
+      const fundSlices=fundHoldings.map((h,i)=>{
+        const pct=h[pctKey] ?? defaultPct;
+        return {
+          label:`${h.ticker.toUpperCase()} (fund)`,
+          value:getVal(h)*pct/100,
+          color:PALETTE[(offset+direct.length+i)%PALETTE.length]
+        };
+      }).filter(s=>s.value>0);
+      return [...direct, ...fundSlices];
+    };
+
+    const breakdownOrder=['stock','fund','bond','etf','crypto'];
+    const typesToShow=breakdownOrder.filter(type=>buildSlices(type,0).length>1);
+
+    if(!typesToShow.length){
       breakdownContainer.innerHTML='';
     } else {
-      // Layout: single column on mobile, up to 3 per row on desktop
-      const perRow=window.innerWidth<=768?1:Math.min(typesWithMultiple.length,3);
+      const perRow=window.innerWidth<=768?1:Math.min(typesToShow.length,3);
       const gridCols=perRow===1?'1fr':perRow===2?'1fr 1fr':'1fr 1fr 1fr';
       let html=`<div class="ins-section-title" style="margin-top:0.5rem">Asset type breakdown</div><div style="display:grid;grid-template-columns:${gridCols};gap:1rem">`;
-      typesWithMultiple.forEach(type=>{
-        const grpHoldings=typeGroups[type];
-        const grpTotal=grpHoldings.reduce((s,h)=>s+getVal(h),0)||1;
+      typesToShow.forEach(type=>{
         const containerId=`alloc-breakdown-${type}`;
         html+=`<div class="card">
           <div class="card-title" style="margin-bottom:0.5rem">${TYPE_LABELS[type]||type} composition</div>
@@ -455,22 +498,17 @@ export function renderAllocation(){
       html+='</div>';
       breakdownContainer.innerHTML=html;
       // Render each breakdown chart
-      typesWithMultiple.forEach((type,ti)=>{
-        const grpHoldings=typeGroups[type];
-        const grpTotal=grpHoldings.reduce((s,h)=>s+getVal(h),0)||1;
+      typesToShow.forEach((type,ti)=>{
+        const slices=buildSlices(type,ti*4);
+        const grpTotal=slices.reduce((s,sl)=>s+sl.value,0)||1;
         const containerId=`alloc-breakdown-${type}`;
-        const slices=grpHoldings.map((h,i)=>({
-          label:h.type==='crypto'?cleanCryptoTicker(h.ticker):h.ticker.toUpperCase(),
-          value:getVal(h),
-          color:PALETTE[(ti*4+i)%PALETTE.length]
-        }));
         renderDonutSVG(containerId, slices, grpTotal, textColor, dimColor);
       });
     }
   }
 }
 
-// AI-powered donut SVG renderer — calls Anthropic API to place labels perfectly
+// Donut SVG renderer
 function renderDonutSVG(containerId, slices, total, textColor, dimColor){
   const container=document.getElementById(containerId);
   if(!container) return;
@@ -573,7 +611,6 @@ function renderDonutSVG(containerId, slices, total, textColor, dimColor){
   container.innerHTML=`<div style="overflow:hidden;width:100%;border-radius:inherit">${svg}</div>`;
 }
 
-
 // ─────────────────────────────────────────
 // REPORTS
 // ─────────────────────────────────────────
@@ -588,24 +625,10 @@ export function openRptYearPicker() {
   });
 }
 
-// Extra categories from Excel that might be missing
-const EXTRA_CATS = [
-  {name:'Fixed',           icon:'ti-file-invoice',    color:'#6366f1'},
-  {name:'Food & Drinks',   icon:'ti-tools-kitchen-2', color:'#f59e0b'},
-  {name:'Groceries',       icon:'ti-shopping-cart',   color:'#84cc16'},
-  {name:'House',           icon:'ti-home-2',          color:'#0ea5e9'},
-  {name:'Events',          icon:'ti-confetti',        color:'#ec4899'},
-  {name:'Hobby',           icon:'ti-device-gamepad-2',color:'#8b5cf6'},
-  {name:'Other',           icon:'ti-dots',            color:'#9ca3af'},
-  {name:'Sport',           icon:'ti-ball-football',   color:'#10b981'},
-  {name:'Tech',            icon:'ti-device-laptop',   color:'#3b82f6'},
-  {name:'Trips',           icon:'ti-plane',           color:'#f97316'},
-];
-
 export async function ensureExtraCategories(){
   const existing = state.cfCategories.map(c=>c.name.toLowerCase());
   let added = false;
-  for(const cat of EXTRA_CATS){
+  for(const cat of EXTRA_CASHFLOW_CATEGORIES){
     if(!existing.includes(cat.name.toLowerCase())){
       try{
         const r = await api('cashflow_categories',{method:'POST',body:JSON.stringify(cat)});
@@ -614,13 +637,12 @@ export async function ensureExtraCategories(){
     }
   }
   if(added){
-    // Re-fetch to ensure correct order
     state.cfCategories = await api('cashflow_categories?order=name.asc');
     renderSettings();
   }
 }
 
-function rptFmt(n){ return n==null?'—':'€ '+Number(n).toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function rptFmt(n){ return n==null?'—':'€ '+Number(n).toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function rptPct(n){ if(n==null) return '—'; return (n>=0?'+':'')+Number(n).toFixed(1)+'%'; }
 
 function mkStat(label, val, cls=''){
@@ -642,7 +664,6 @@ function populateRptYearSel(){
 function onRptYearChange(){
   const sel = document.getElementById('rpt-year-sel'); if(!sel) return;
   rptFilterYear = sel.value;
-
   renderReports();
 }
 
@@ -660,6 +681,7 @@ export function renderReports(){
   renderAssetReport('crypto');
   renderAssetReport('etf');
   renderAssetReport('stock');
+  renderAssetReport('fund');
 }
 
 // ── Cashflow table ──
@@ -826,7 +848,7 @@ function renderInvestmentsReport(){
     if(rptFilterYear==='all') return true;
     const y=Number(rptFilterYear); return p.start.getFullYear()===y||p.end.getFullYear()===y;
   });
-  const invTypes = ['crypto','etf','stock','bond'];
+  const invTypes = ['crypto','etf','fund','stock','bond'];
   const rows = periods.map(p=>{
     const pTxs = allTx.filter(t=>{const d=new Date(t.date);return d>=p.start&&d<=p.end&&t.type==='purchase';});
     if(!pTxs.length) return null;
@@ -853,7 +875,7 @@ function renderInvestmentsReport(){
     mkStat('Gain / Loss', rptFmt(pnl)+(pnl!==0?' ('+rptPct(pnlPct)+')':''), pnl>=0?'pos':'neg') +
     mkStat('Periods active', rows.length);
 
-  const thead = `<thead><tr><th>Period</th><th>Crypto</th><th>ETF</th><th>Stocks</th><th>Bonds</th><th>Total</th></tr></thead>`;
+  const thead = `<thead><tr><th>Period</th><th>Crypto</th><th>ETF</th><th>Fund</th><th>Stocks</th><th>Bonds</th><th>Total</th></tr></thead>`;
   const tbody = rows.map(r=>`<tr>
     <td>${r.period}</td>
     ${invTypes.map(type=>`<td>${r.byType[type]>0?rptFmt(r.byType[type]):'—'}</td>`).join('')}
@@ -863,7 +885,7 @@ function renderInvestmentsReport(){
   document.getElementById('rpt-inv-table').innerHTML = thead+`<tbody>${tbody}</tbody>`+tfoot;
 }
 
-// ── Asset tables (crypto/etf/stock) ──
+// ── Asset tables (crypto/etf/fund/stock) ──
 function renderAssetReport(type){
   const typeHoldings = state.holdings.filter(h=>h.type===type);
   const summaryEl = document.getElementById(`rpt-${type}-summary`);

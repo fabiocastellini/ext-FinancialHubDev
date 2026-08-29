@@ -1,4 +1,4 @@
-import { H_TYPE_OPTIONS, TYPE_LABELS, TYPE_ICONS, APP_ENV } from '../config.js';
+import { H_TYPE_OPTIONS, TYPE_LABELS, TYPE_COLORS, TYPE_ICONS, APP_ENV } from '../config.js';
 
 import { exposeLegacyFunctions } from '../utils/legacy.js';
 import { loadAll } from '../app.js';
@@ -42,7 +42,6 @@ export function renderHoldings(){
   const byType = {};
   state.holdings.forEach(h=>{ if(!byType[h.type]) byType[h.type]=[]; byType[h.type].push(h); });
   const totalPortfolio = state.holdings.reduce((s,h)=>s+getVal(h),0)||1;
-  const typeColorMap = {bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',dividend:'#60a8f5',etf:'#10b981',stock:'#6366f1'};
 
   // Sort categories alphabetically
   const sortedTypes = Object.keys(byType).sort((a,b)=>(TYPE_LABELS[a]||a).localeCompare(TYPE_LABELS[b]||b));
@@ -52,7 +51,7 @@ export function renderHoldings(){
     const items = byType[type];
     const catTotal = items.reduce((s,h)=>s+getVal(h),0);
     const catPct   = (catTotal/totalPortfolio*100).toFixed(1);
-    const color    = typeColorMap[type]||'#888';
+    const color    = TYPE_COLORS[type]||'#888';
     const icon     = TYPE_ICONS[type]||'ti-wallet';
     const isSimple = type==='bank'||type==='cash'||type==='dividend';
 
@@ -125,10 +124,10 @@ export function renderCategoryDetail(type){
   if(!container) return;
   const items = state.holdings.filter(h=>h.type===type);
   if(!items.length){ closeCategoryDetail(); return; }
-  const typeColorMap = {bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',dividend:'#60a8f5',etf:'#10b981',stock:'#6366f1'};
-  const color = typeColorMap[type]||'#888';
+  const color = TYPE_COLORS[type]||'#888';
   const icon = TYPE_ICONS[type]||'ti-wallet';
   const isSimple = type==='bank'||type==='cash'||type==='dividend';
+  const isFund   = type==='fund';
   const totalPortfolio = state.holdings.reduce((s,h)=>s+getVal(h),0)||1;
   const catTotal = items.reduce((s,h)=>s+getVal(h),0);
   const catPct = (catTotal/totalPortfolio*100).toFixed(1);
@@ -158,9 +157,17 @@ export function renderCategoryDetail(type){
       ? `<td><span class="${gainClass}">${fmt(gain)}</span><br><span style="font-size:11px;color:${gain>=0?'var(--green)':'var(--red)'}">${fmtPct(gainPct)}</span></td>`
       : `<td><span style="color:var(--text3);font-size:12px">—</span></td>`;
 
+    const stockPct = h.stock_pct ?? 100;
+    const bondPct  = h.bond_pct ?? 0;
+    const fundAllocationCells = isFund 
+      ? `<td><span style="font-size:12px;font-weight:600;color:var(--green,#10b981);background:rgba(16,185,129,0.12);padding:2px 6px;border-radius:4px">${stockPct}%</span></td>
+         <td><span style="font-size:12px;font-weight:600;color:var(--blue,#3b82f6);background:rgba(59,130,246,0.12);padding:2px 6px;border-radius:4px">${bondPct}%</span></td>`
+      : '';
+
     return `<tr data-hid="${h.id}">
         <td><strong style="font-weight:600">${dispName}</strong>${!isSimple?`<br><span style="color:var(--text2);font-size:12px">${dispTicker}</span>`:''}</td>
         ${!isSimple?`<td>${fmtN(h.qty)}</td>`:''}
+        ${fundAllocationCells}
         ${!isSimple?`<td style="color:var(--text2)">${fmt(h.avg_cost)}</td>`:''}
         ${priceCell}
         ${valCell}
@@ -173,9 +180,10 @@ export function renderCategoryDetail(type){
   }).join('');
 
   // Total row for investment categories
+  const colspanVal = isFund ? 6 : 4;
   const totalRow = (!isSimple && catHasPrices) ? `
     <tr style="background:var(--surface2);font-weight:600;border-top:2px solid var(--border2)">
-      <td colspan="${4}" style="color:var(--text2);font-size:12px;text-transform:uppercase;letter-spacing:0.04em">Total</td>
+      <td colspan="${colspanVal}" style="color:var(--text2);font-size:12px;text-transform:uppercase;letter-spacing:0.04em">Total</td>
       <td style="font-weight:700">${fmt(catTotal)}</td>
       <td><span class="${catGain>=0?'pos-bg':'neg-bg'}">${fmt(catGain)}</span><br>
         <span style="font-size:11px;color:${catGain>=0?'var(--green)':'var(--red)'}">${fmtPct(catGainPct)}</span></td>
@@ -184,7 +192,9 @@ export function renderCategoryDetail(type){
 
   const thead = isSimple
     ? `<tr><th>Account</th><th>Balance</th><th></th></tr>`
-    : `<tr><th>Asset</th><th>Qty</th><th>Avg cost</th><th>Live price</th><th>Current value</th><th>Gain / loss</th><th></th></tr>`;
+    : isFund
+      ? `<tr><th>Asset</th><th>Qty</th><th>Stocks %</th><th>Bonds %</th><th>Avg cost</th><th>Live price</th><th>Current value</th><th>Gain / loss</th><th></th></tr>`
+      : `<tr><th>Asset</th><th>Qty</th><th>Avg cost</th><th>Live price</th><th>Current value</th><th>Gain / loss</th><th></th></tr>`;
 
   container.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap">
@@ -215,21 +225,61 @@ let tickerSearchTimeout = null;
 
 let hCostMode = 'unit'; // 'unit' = average cost per unit, 'total' = total amount paid
 
-export function onHoldingTypeChange(type){
-  const isSimple = type==='bank' || type==='cash' || type==='dividend';
-  document.getElementById('h-name-wrap').style.display  = (type==='bank'||type==='cash') ? '' : 'none';
-  document.getElementById('h-div-stock-wrap').style.display = type==='dividend' ? '' : 'none';
+export function updateFundBreakdown(changedField) {
+  const stockEl = document.getElementById('h-fund-stock');
+  const bondEl = document.getElementById('h-fund-bond');
+  if (!stockEl || !bondEl) return;
+
+  if (changedField === 'stock') {
+    let stockVal = Math.min(100, Math.max(0, parseFloat(stockEl.value) || 0));
+    stockEl.value = stockVal;
+    bondEl.value = (100 - stockVal).toFixed(0);
+  } else {
+    let bondVal = Math.min(100, Math.max(0, parseFloat(bondEl.value) || 0));
+    bondEl.value = bondVal;
+    stockEl.value = (100 - bondVal).toFixed(0);
+  }
+}
+
+export function onHoldingTypeChange(type) {
+  const isSimple = type === 'bank' || type === 'cash' || type === 'dividend';
+  const isFund   = type === 'fund';
+
+  document.getElementById('h-name-wrap').style.display      = (type === 'bank' || type === 'cash') ? '' : 'none';
+  document.getElementById('h-div-stock-wrap').style.display = type === 'dividend' ? '' : 'none';
+  
+  // Toggle Fund allocation UI wrapper
+  const fundWrap = document.getElementById('h-fund-wrap');
+  if (fundWrap) fundWrap.style.display = isFund ? '' : 'none';
+
   document.getElementById('h-ticker-wrap').style.display = isSimple ? 'none' : '';
   document.getElementById('h-qty-wrap').style.display    = isSimple ? 'none' : '';
-  document.getElementById('h-name-label').textContent    = type==='bank' ? 'Account name' : 'Label';
-  document.getElementById('h-name').placeholder          = type==='bank' ? 'e.g. Intesa Sanpaolo' : type==='dividend' ? 'e.g. AAPL Dividends' : 'e.g. Wallet cash';
-  if(type==='dividend'){
-    document.getElementById('h-div-stock').value = '';
-    document.getElementById('h-div-stock-label').textContent = 'Select stock';
-    document.getElementById('h-div-stock-trigger').classList.add('placeholder');
+  document.getElementById('h-name-label').textContent    = type === 'bank' ? 'Account name' : 'Label';
+  document.getElementById('h-name').placeholder          = type === 'bank' ? 'e.g. Intesa Sanpaolo' : type === 'dividend' ? 'e.g. AAPL Dividends' : 'e.g. Wallet cash';
+
+  // Safe assignments with optional chaining / null checks
+  if (isFund) {
+    const stockEl = document.getElementById('h-fund-stock');
+    const bondEl = document.getElementById('h-fund-bond');
+    if (stockEl) stockEl.value = 100;
+    if (bondEl) bondEl.value = 0;
   }
+
+  if (type === 'dividend') {
+    const divStock = document.getElementById('h-div-stock');
+    if (divStock) divStock.value = '';
+    
+    const divStockLabel = document.getElementById('h-div-stock-label');
+    if (divStockLabel) divStockLabel.textContent = 'Select stock';
+    
+    const divStockTrigger = document.getElementById('h-div-stock-trigger');
+    if (divStockTrigger) divStockTrigger.classList.add('placeholder');
+  }
+
   hCostMode = 'unit';
-  document.getElementById('h-cost-mode-toggle').style.display = isSimple ? 'none' : '';
+  const toggleBtn = document.getElementById('h-cost-mode-toggle');
+  if (toggleBtn) toggleBtn.style.display = isSimple ? 'none' : '';
+  
   updateCostModeUI();
   clearTickerSelection();
 }
@@ -474,28 +524,49 @@ export async function saveHolding(){
     } else {
       await api('holdings',{method:'POST',body:JSON.stringify({ticker, name, type, qty:1, avg_cost})});
     }
-  } else {
-    const ticker=document.getElementById('h-ticker').value.trim().toUpperCase();
-    const qty=parseFloat(document.getElementById('h-qty').value)||0;
-    const selectedLabel=document.getElementById('h-selected-label').textContent;
-    // extract name from selected label (format: "TICKER — Name (Exch)")
+  }
+  else
+  {
+    const ticker = document.getElementById('h-ticker').value.trim().toUpperCase();
+    const qty = parseFloat(document.getElementById('h-qty').value) || 0;
+    const selectedLabel = document.getElementById('h-selected-label').textContent;
     const namePart = selectedLabel.includes(' — ') ? selectedLabel.split(' — ')[1].replace(/\s*\(.*\)$/,'').trim() : ticker;
+
     if(!ticker){ await showAlert('Please search and select an asset first.'); return; }
     if(qty<=0){ await showAlert('Please enter a quantity.'); return; }
     if(costInput<=0){ await showAlert(hCostMode==='total' ? 'Please enter the total cost paid.' : 'Please enter the average cost per unit.'); return; }
-    // If the person entered a TOTAL cost, convert it to a per-unit cost before storing —
-    // avg_cost is always stored per-unit in the database.
+
     const avg_cost = hCostMode==='total' ? costInput/qty : costInput;
-    const existing=state.holdings.find(h=>h.ticker===ticker);
-    // Duplicate check: warn if ticker already exists as a different type
-    const existingDiff=state.holdings.find(h=>h.ticker===ticker&&h.type!==type);
+    
+    // Extract percentages for Fund holdings
+    let fundFields = {};
+    if (type === 'fund') {
+      const stock_pct = parseFloat(document.getElementById('h-fund-stock')?.value) || 0;
+      const bond_pct  = parseFloat(document.getElementById('h-fund-bond')?.value) || 0;
+      
+      if (stock_pct + bond_pct !== 100) {
+        await showAlert('Stock and Bond allocation must sum to 100%.');
+        return;
+      }
+      fundFields = { stock_pct, bond_pct };
+    }
+
+    const existing = state.holdings.find(h=>h.ticker===ticker);
+    const existingDiff = state.holdings.find(h=>h.ticker===ticker&&h.type!==type);
     if(existingDiff&&!existing){ if(!await showConfirm(`Ticker ${ticker} already exists as ${TYPE_LABELS[existingDiff.type]}. Add anyway?`)) return; }
+    
     if(existing){
-      const totalCost=existing.qty*existing.avg_cost+qty*avg_cost;
-      const newQty=existing.qty+qty;
-      await api(`holdings?id=eq.${existing.id}`,{method:'PATCH',body:JSON.stringify({qty:newQty,avg_cost:totalCost/newQty})});
+      const totalCost = existing.qty*existing.avg_cost + qty*avg_cost;
+      const newQty = existing.qty + qty;
+      await api(`holdings?id=eq.${existing.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ qty: newQty, avg_cost: totalCost / newQty, ...fundFields })
+      });
     } else {
-      await api('holdings',{method:'POST',body:JSON.stringify({ticker,name:namePart||ticker,type,qty,avg_cost})});
+      await api('holdings', {
+        method: 'POST',
+        body: JSON.stringify({ ticker, name: namePart || ticker, type, qty, avg_cost, ...fundFields })
+      });
     }
   }
   closeModal('modal-holding'); await loadAll(); toast('Holding saved ✓'); refreshPrices(true, true);
@@ -884,4 +955,5 @@ exposeLegacyFunctions({
   refreshPrices,
   openAddHoldingModal,
   openHTypePicker,
+  updateFundBreakdown,  
 });

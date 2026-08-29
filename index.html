@@ -468,6 +468,11 @@
       <div class="rpt-summary" id="rpt-stock-summary"></div>
       <div class="rpt-table-wrap"><table class="rpt-table" id="rpt-stock-table"></table></div>
     </div>
+    <div class="rpt-section">
+      <div class="ins-section-header"><i class="ti ti-chart-candle"></i> Funds</div>
+      <div class="rpt-summary" id="rpt-fund-summary"></div>
+      <div class="rpt-table-wrap"><table class="rpt-table" id="rpt-fund-table"></table></div>
+    </div>
   </div>
 
   <!-- SETTINGS -->
@@ -580,21 +585,30 @@
       <div class="alloc-grid" style="margin-bottom:0.75rem">
         <div class="card">
           <div class="card-title">By asset type</div>
-          <div class="card-sub">Portfolio weight by category</div>
+          <div class="card-sub">Portfolio weight by category
+          <br>
+            <i>NOTE: Funds are incorporated into Stocks or Bonds</i>
+          </div>
           <div id="alloc-type-container" style="width:100%;min-height:200px;display:flex;align-items:center;justify-content:center">
             <div class="spin" style="width:24px;height:24px"></div>
           </div>
         </div>
         <div class="card">
           <div class="card-title">By investment family</div>
-          <div class="card-sub">Stocks, ETFs, crypto &amp; bonds — by family</div>
+          <div class="card-sub">
+            Stocks, ETFs, crypto &amp; bonds — by family<br>
+            <i>NOTE: Funds are incorporated into Stocks or Bonds</i>
+          </div>
           <div id="alloc-family-container" style="width:100%;min-height:200px;display:flex;align-items:center;justify-content:center">
             <div class="spin" style="width:24px;height:24px"></div>
           </div>
         </div>
         <div class="card">
           <div class="card-title">Investment portfolio breakdown</div>
-          <div class="card-sub">Stocks, ETFs, crypto &amp; bonds only</div>
+          <div class="card-sub">Stocks, ETFs, crypto &amp; bonds — by family
+          <br>
+            <i>NOTE: Funds are incorporated into Stocks or Bonds</i>
+          </div>
           <div id="alloc-hold-container" style="width:100%;min-height:200px;display:flex;align-items:center;justify-content:center">
             <div class="spin" style="width:24px;height:24px"></div>
           </div>
@@ -757,6 +771,20 @@
           <i class="ti ti-chevron-down"></i>
         </button>
         <input type="hidden" id="h-div-stock">
+      </div>
+      <!-- Fund allocation fields -->
+      <div class="form-group form-full" id="h-fund-wrap" style="display:none">
+        <label>Asset Allocation (%)</label>
+        <div style="display:flex;gap:10px">
+          <div style="flex:1">
+            <label style="font-size:11px;color:var(--text2)">Stocks %</label>
+            <input type="number" inputmode="decimal" id="h-fund-stock" placeholder="100" min="0" max="100" value="100" oninput="updateFundBreakdown('stock')">
+          </div>
+          <div style="flex:1">
+            <label style="font-size:11px;color:var(--text2)">Bonds %</label>
+            <input type="number" inputmode="decimal" id="h-fund-bond" placeholder="0" min="0" max="100" value="0" oninput="updateFundBreakdown('bond')">
+          </div>
+        </div>
       </div>
       <!-- Investment fields -->
       <div class="form-group form-full" id="h-ticker-wrap" style="display:none">

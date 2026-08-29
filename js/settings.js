@@ -2,7 +2,7 @@ import { exposeLegacyFunctions } from './utils/legacy.js';
 
 import { state } from './state.js';
 import { api } from './api.js';
-import { TYPE_ICONS } from './config.js';
+import { TYPE_COLORS, TYPE_ICONS } from './config.js';
 
 import {fmt, fmtN, fmtPct} from './utils/date.js';
 
@@ -522,7 +522,6 @@ export function onCfSearch(q){
     return;
   }
   // Group by holding
-  const typeColorMap = {bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',dividend:'#60a8f5',etf:'#10b981',stock:'#6366f1'};
   const grouped = {};
   results.forEach(t=>{
     const hId = t.holding_id || '__none__';
@@ -533,7 +532,7 @@ export function onCfSearch(q){
   Object.entries(grouped).forEach(([hId, txs])=>{
     const h = state.holdings.find(x=>x.id===hId);
     const dispName = h ? (h.type==='crypto'?cleanCryptoName(h.name||h.ticker):(h.name||h.ticker)) : 'Unknown account';
-    const color = h ? (typeColorMap[h.type]||'#888') : 'var(--text3)';
+    const color = h ? (TYPE_COLORS[h.type]||'#888') : 'var(--text3)';
     const icon  = h ? (TYPE_ICONS[h.type]||'ti-wallet') : 'ti-wallet';
     html += '<div class="cf-account-block" style="margin-bottom:8px">'
       + '<div style="display:flex;align-items:center;gap:10px;padding:10px 1.25rem;background:var(--surface2);border-bottom:1px solid var(--border)">'

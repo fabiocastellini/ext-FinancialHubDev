@@ -1,4 +1,6 @@
 import { state } from '../state.js';
+import { DEFAULT_CASHFLOW_CATEGORIES, TYPE_COLORS } from '../config.js';
+
 import { api } from '../api.js';
 import { exposeLegacyFunctions } from '../utils/legacy.js';
 import {fmt, fmtN, fmtPct, fmtShort, fmtDateTimeDDMMYYYY, fmtDateDDMMYYYY, isoToday} from '../utils/date.js';
@@ -16,17 +18,6 @@ import { refreshPrices } from '../data/holdings.js';
 // ─────────────────────────────────────────
 // CASHFLOW
 // ─────────────────────────────────────────
-const DEFAULT_CATEGORIES=[
-  {name:'Food & Dining',icon:'ti-tools-kitchen-2',color:'#f59e0b'},
-  {name:'Transport',icon:'ti-car',color:'#3b82f6'},
-  {name:'Bills & Utilities',icon:'ti-file-invoice',color:'#6366f1'},
-  {name:'Health',icon:'ti-heart-rate-monitor',color:'#ec4899'},
-  {name:'Entertainment',icon:'ti-device-tv',color:'#8b5cf6'},
-  {name:'Shopping',icon:'ti-shopping-bag',color:'#f97316'},
-  {name:'Salary',icon:'ti-briefcase',color:'#10b981'},
-  {name:'Investment',icon:'ti-trending-up',color:'#0ea5e9'},
-];
-
 export async function loadCashflow(){
   [state.cfCategories, state.cfTransactions, state.cfRecurrences]=await Promise.all([
     api('cashflow_categories?order=name.asc'),
@@ -34,7 +25,7 @@ export async function loadCashflow(){
     api('recurrences?order=next_due.asc'),
   ]);
   if(!state.cfCategories.length){
-    for(const c of DEFAULT_CATEGORIES){
+    for(const c of DEFAULT_CASHFLOW_CATEGORIES){
       const r=await api('cashflow_categories',{method:'POST',body:JSON.stringify(c)});
       if(Array.isArray(r)&&r[0]) state.cfCategories.push(r[0]);
     }
@@ -112,14 +103,13 @@ export function renderCashflow(){
   if(!state.cfSearchQuery) closeCfSearch();
   const container=document.getElementById('cf-accounts'); if(!container) return;
   if(!state.holdings.length){container.innerHTML='<div class="card"><div class="empty"><i class="ti ti-wallet"></i><p>No holdings yet.</p></div></div>';return;}
-  const typeColorMap={bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',dividend:'#60a8f5',etf:'#10b981',stock:'#6366f1'};
   // Group by type
   const byType={};
   state.holdings.forEach(h=>{if(!byType[h.type])byType[h.type]=[];byType[h.type].push(h);});
   const sortedTypes=Object.keys(byType).sort((a,b)=>(TYPE_LABELS[a]||a).localeCompare(TYPE_LABELS[b]||b));
   container.innerHTML=sortedTypes.map(type=>{
     const typeHoldings=byType[type];
-    const color=typeColorMap[type]||'#888';
+    const color=TYPE_COLORS[type]||'#888';
     const icon=TYPE_ICONS[type]||'ti-wallet';
     const typeLabel=TYPE_LABELS[type]||type;
     const typeTxCount=state.cfTransactions.filter(t=>typeHoldings.some(h=>t.holding_id===h.id||t.holding_to_id===h.id)).length;

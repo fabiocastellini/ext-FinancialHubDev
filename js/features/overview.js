@@ -46,7 +46,7 @@ export function renderOverview() {
   // Portfolio + liquidity stat cards
 
   const invHoldings = state.holdings.filter(
-    h => ['stock', 'etf', 'crypto', 'bond'].includes(h.type)
+    h => ['stock', 'etf', 'crypto', 'bond', 'fund'].includes(h.type)
   );
 
   const liqHoldings = state.holdings.filter(

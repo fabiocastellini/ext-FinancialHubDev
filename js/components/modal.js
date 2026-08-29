@@ -6,7 +6,7 @@ export function openModal(id) {
   document.getElementById(id).classList.add('open');
 
   if (id === 'modal-holding') {
-    ['h-ticker', 'h-search', 'h-name', 'h-qty', 'h-cost'].forEach(i => {
+    ['h-ticker', 'h-search', 'h-name', 'h-qty', 'h-cost', 'h-fund-stock', 'h-fund-bond'].forEach(i => {
       const el = document.getElementById(i);
       if (el) el.value = '';
     });
@@ -103,8 +103,6 @@ function showDialog(
     openModal('modal-dialog');
   });
 }
-
-
 
 // ─────────────────────────────────────────────
 // Legacy inline-HTML compatibility
