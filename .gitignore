@@ -1,0 +1,3 @@
+# Files and folders that must not be committed on the repo
+*.wrangler
+env.json
