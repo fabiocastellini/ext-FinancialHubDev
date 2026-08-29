@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { exposeLegacyFunctions } from '../utils/legacy.js';
-import { TYPE_LABELS, TYPE_ICONS } from '../config.js';
+import { TYPE_LABELS, TYPE_ICONS, TYPE_COLORS } from '../config.js';
 import { cleanCryptoName } from '../utils/calculations.js';
 import { openModal, closeModal } from '../components/modal.js';
 

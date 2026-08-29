@@ -1,4 +1,4 @@
-import { H_TYPE_OPTIONS, TYPE_LABELS, TYPE_COLORS, TYPE_ICONS, APP_ENV } from '../config.js';
+import { H_TYPE_OPTIONS, TYPE_LABELS, TYPE_COLORS, TYPE_ICONS, APP_ENV, APP_SECRET, CF_WORKER_PROXY } from '../config.js';
 
 import { exposeLegacyFunctions } from '../utils/legacy.js';
 import { loadAll } from '../app.js';
@@ -365,51 +365,190 @@ export async function searchCoinGecko(q){
 }
 
 export async function searchYahoo(q){
-  // On prod (Cloudflare Workers) we have our own same-origin API route — no CORS proxy needed at all.
-  if(APP_ENV==='prod'){
-    try{
-      const r = await fetch(`/api/yh-search?q=${encodeURIComponent(q)}`, {signal: AbortSignal.timeout(6000)});
-      if(!r.ok) return null;
+  const authHeaders = typeof APP_SECRET !== 'undefined' && APP_SECRET ? { 'x-app-secret': APP_SECRET } : {};
+
+  // Production uses Cloudflare Worker endpoint; Dev uses relative local route
+  const searchEndpoint = (typeof APP_ENV !== 'undefined' && APP_ENV === 'prod') 
+    ? `${CF_WORKER_PROXY}/api/yh-search?q=${encodeURIComponent(q)}`
+    : `/api/yh-search?q=${encodeURIComponent(q)}`;
+
+  try {
+    const r = await fetch(searchEndpoint, {
+      headers: authHeaders,
+      signal: AbortSignal.timeout(6000)
+    });
+    if (r.ok) {
       const d = await r.json();
-      return (d?.quotes||[]).filter(x=>x.symbol && x.quoteType!=='CURRENCY').map(r=>({
+      const results = (d?.quotes || []).filter(x => x.symbol && x.quoteType !== 'CURRENCY').map(r => ({
         symbol: r.symbol,
-        name: r.longname||r.shortname||r.symbol,
-        exch: r.exchDisp||r.exchange||''
+        name: r.longname || r.shortname || r.symbol,
+        exch: r.exchDisp || r.exchange || ''
       }));
-    }catch{
-      return null;
+      if (results.length) return results;
     }
+  } catch (e) {
+    console.warn('Worker yh-search failed, trying fallback proxies...', e);
   }
 
-  // Dev / non-Worker environments: fall back to public CORS proxies (best-effort, may be flaky)
+  // Fallback public proxies if worker endpoint is unavailable
   const yhSearch = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&lang=en-US&region=US&quotesCount=8&newsCount=0&enableFuzzyQuery=false&enableCb=false`;
+  
   const proxyFns = [
-    u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-    u=>`https://corsproxy.io/?url=${encodeURIComponent(u)}`,
-    u=>`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-    u=>`https://thingproxy.freeboard.io/fetch/${u}`,
-    u=>`https://cors.eu.org/${u}`,
+    u => `${CF_WORKER_PROXY}?url=${encodeURIComponent(u)}`,
+    u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+    u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+    u => `https://cors.eu.org/${encodeURIComponent(u)}`,
   ];
-  // Race every proxy simultaneously — use whichever responds first with valid data,
-  // instead of trying them one-by-one (which wastes time on dead/rate-limited proxies).
+
   const tryProxy = async (proxyFn) => {
-    const r = await fetch(proxyFn(yhSearch), {signal: AbortSignal.timeout(6000)});
-    if(!r.ok) throw new Error('not ok');
+    const r = await fetch(proxyFn(yhSearch), { signal: AbortSignal.timeout(6000), headers: authHeaders });
+    if (!r.ok) throw new Error('not ok');
     const text = await r.text();
-    if(!text.startsWith('{')) throw new Error('not json');
+    if (!text.startsWith('{')) throw new Error('not json');
     const d = JSON.parse(text);
-    const results = (d?.quotes||[]).filter(q=>q.symbol && q.quoteType!=='CURRENCY').map(r=>({
+    const results = (d?.quotes || []).filter(q => q.symbol && q.quoteType !== 'CURRENCY').map(r => ({
       symbol: r.symbol,
-      name: r.longname||r.shortname||r.symbol,
-      exch: r.exchDisp||r.exchange||''
+      name: r.longname || r.shortname || r.symbol,
+      exch: r.exchDisp || r.exchange || ''
     }));
-    if(!results.length) throw new Error('no results');
+    if (!results.length) throw new Error('no results');
     return results;
   };
-  try{
+
+  try {
     return await Promise.any(proxyFns.map(fn => tryProxy(fn)));
-  }catch{
+  } catch {
     return null;
+  }
+}
+
+// Yahoo Finance via Cloudflare Worker / CORS proxy for stocks/ETFs/bonds
+export async function fetchYahooRaw(ticker){
+  const authHeaders = typeof APP_SECRET !== 'undefined' && APP_SECRET ? {  'X-App-Secret': APP_SECRET } : {};
+
+  const priceEndpoint = (typeof APP_ENV !== 'undefined' && APP_ENV === 'prod') 
+    ? `${CF_WORKER_PROXY}/api/yh-price?ticker=${encodeURIComponent(ticker)}`
+    : `/api/yh-price?ticker=${encodeURIComponent(ticker)}`;
+
+  try {
+    const r = await fetch(priceEndpoint, {
+      headers: authHeaders,
+      signal: AbortSignal.timeout(5000)
+    });
+    if (r.ok) {
+      const d = await r.json();
+      const meta = d?.chart?.result?.[0]?.meta;
+      const price = meta?.regularMarketPrice;
+      if (price != null) return { price, currency: meta?.currency || 'USD' };
+    }
+  } catch (e) {
+    console.warn('Worker yh-price failed, trying fallback proxies...', e);
+  }
+
+   // 2. Fallback to general proxies
+  const yhUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`;
+  
+  const proxyFns = [
+    u => `${CF_WORKER_PROXY}?url=${encodeURIComponent(u)}`,
+    u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+    u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+    u => `https://cors.eu.org/${encodeURIComponent(u)}`,
+  ];
+
+  const tryProxy = async (proxyFn) => {
+    const r = await fetch(proxyFn(yhUrl), { signal: AbortSignal.timeout(3000), headers: authHeaders });
+    if (!r.ok) throw new Error('not ok');
+    const text = await r.text();
+    if (!text.startsWith('{')) throw new Error('not json');
+    const d = JSON.parse(text);
+    const meta = d?.chart?.result?.[0]?.meta;
+    const price = meta?.regularMarketPrice;
+    if (price == null) throw new Error('no price');
+    return { price, currency: meta?.currency || 'USD' };
+  };
+
+  try {
+    return await Promise.any(proxyFns.map(fn => tryProxy(fn)));
+  } catch {
+    return null;
+  }
+}
+
+// Cache of EUR conversion rates for the current refresh cycle — several holdings often
+// share the same currency (e.g. multiple USD stocks), so we only fetch each rate once.
+let fxRateCache = {};
+export async function getEurConversionRate(currency){
+  if(!currency || currency==='EUR') return 1;
+  if(fxRateCache[currency] != null) return fxRateCache[currency];
+  const raw = await fetchYahooRaw(`EUR${currency}=X`);
+  fxRateCache[currency] = raw?.price || null;
+  return fxRateCache[currency];
+}
+
+// Public: fetch a stock/ETF/bond price, converted to EUR if it's quoted in another currency
+export async function fetchYahooPrice(ticker){
+  const raw = await fetchYahooRaw(ticker);
+  if(!raw){
+    console.warn(`Yahoo: could not fetch price for ${ticker}`);
+    return null;
+  }
+  if(!raw.currency || raw.currency==='EUR') return raw.price;
+  const rate = await getEurConversionRate(raw.currency);
+  if(!rate){
+    console.warn(`Yahoo: could not fetch ${raw.currency}→EUR rate — showing ${ticker} in its native currency`);
+    return raw.price;
+  }
+  return raw.price / rate;
+}
+
+const PRICE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+let lastPriceFetch = 0;
+
+export async function refreshPrices(force=false, silent=false){
+  const investable = state.holdings.filter(h=>!['bank','cash','dividend'].includes(h.type));
+  if(!investable.length){ renderHoldings(); return; }
+
+  // Use cached prices if fresh enough and not forced
+  const now = Date.now();
+  if(!force && now - lastPriceFetch < PRICE_CACHE_TTL && Object.keys(prices).length > 0){
+    renderHoldings(); renderOverview(); renderAllocation();
+    return;
+  }
+
+  fxRateCache = {}; // fetch fresh exchange rates this cycle
+
+  const hBtn = document.getElementById('h-refresh-btn');
+  const loadHTML = '<span class="spin"></span> Loading…';
+  if(hBtn){ hBtn.innerHTML = loadHTML; hBtn.disabled = true; }
+
+  const cryptoTickers    = [...new Set(investable.filter(h=>h.type==='crypto').map(h=>h.ticker))];
+  const nonCryptoTickers = [...new Set(investable.filter(h=>h.type!=='crypto').map(h=>h.ticker))];
+
+  // Fire crypto (1 batch) and all Yahoo requests simultaneously
+  const [cryptoPrices] = await Promise.all([
+    fetchAllCryptoPrices(cryptoTickers),
+    Promise.all(nonCryptoTickers.map(async t=>{
+      const p = await fetchYahooPrice(t);
+      if(p != null) state.prices[t] = p;
+    }))
+  ]);
+  Object.assign(state.prices, cryptoPrices);
+  lastPriceFetch = Date.now();
+
+  const timeStr = new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  if(hBtn){ hBtn.innerHTML = '<i class="ti ti-refresh"></i> Refresh prices'; hBtn.disabled = false; }
+  document.getElementById('refresh-info').textContent = 'Updated ' + timeStr;
+  renderHoldings(); renderOverview(); renderAllocation();
+
+  const allTickers = [...cryptoTickers, ...nonCryptoTickers];
+  const fetched = allTickers.filter(t=>state.prices[t]!=null).length;
+  const failed  = allTickers.filter(t=>state.prices[t]==null).length;
+  if(!silent){
+    if(fetched===0) toast('⚠️ Could not load any prices');
+    else if(failed>0) toast(`Prices updated — ${failed} ticker(s) unavailable`);
+    else toast(`✓ All ${fetched} price${fetched>1?'s':''} updated`);
   }
 }
 
@@ -723,12 +862,8 @@ const COINGECKO_IDS = {
 };
 
 // Resolve ticker → CoinGecko ID.
-// Ticker may be the raw symbol (e.g. KAS) or whatever Yahoo would use.
-// selectCryptoTicker() always registers the correct cgId at selection time.
 export function cgIdForTicker(ticker){
-  // Direct match first (set at search-select time or from built-in map)
   if(COINGECKO_IDS[ticker]) return COINGECKO_IDS[ticker];
-  // Strip common suffixes: BTC-EUR → BTC, KASUSDT → KAS
   const base = ticker.replace(/[-/](EUR|USD|USDT|USDC|BTC|ETH)$/i,'')
                       .replace(/(EUR|USD|USDT|USDC)$/i,'').toUpperCase();
   return COINGECKO_IDS[base] || null;
@@ -743,7 +878,6 @@ export async function fetchAllCryptoPrices(tickers){
     const r = await fetch(url, {signal: AbortSignal.timeout(10000)});
     if(!r.ok) throw new Error('CoinGecko HTTP ' + r.status);
     const data = await r.json();
-    // Build ticker → price map
     const result = {};
     tickers.forEach(t=>{
       const id = cgIdForTicker(t);
@@ -753,127 +887,6 @@ export async function fetchAllCryptoPrices(tickers){
   }catch(e){
     console.warn('CoinGecko batch fetch failed:', e.message);
     return {};
-  }
-}
-
-// Yahoo Finance via CORS proxy for stocks/ETFs/bonds
-// Low-level: fetch the raw price + currency for any Yahoo ticker (a stock, or an FX pair like 'EURUSD=X')
-export async function fetchYahooRaw(ticker){
-  if(APP_ENV==='prod'){
-    try{
-      const r = await fetch(`/api/yh-price?ticker=${encodeURIComponent(ticker)}`, {signal: AbortSignal.timeout(5000)});
-      if(!r.ok) throw new Error('not ok');
-      const d = await r.json();
-      const meta = d?.chart?.result?.[0]?.meta;
-      const price = meta?.regularMarketPrice;
-      if(price == null) throw new Error('no price');
-      return { price, currency: meta?.currency || 'USD' };
-    }catch{
-      return null;
-    }
-  }
-
-  // Dev / non-Worker environments: fall back to public CORS proxies (best-effort, may be flaky)
-  const yhUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`;
-  const proxyFns = [
-    u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-    u=>`https://corsproxy.io/?url=${encodeURIComponent(u)}`,
-    u=>`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-    u=>`https://thingproxy.freeboard.io/fetch/${u}`,
-    u=>`https://cors.eu.org/${u}`,
-  ];
-  // Race all proxies simultaneously — use whichever responds first with valid data
-  const tryProxy = async (proxyFn) => {
-    const r = await fetch(proxyFn(yhUrl), {signal: AbortSignal.timeout(3000)});
-    if(!r.ok) throw new Error('not ok');
-    const text = await r.text();
-    if(!text.startsWith('{')) throw new Error('not json');
-    const d = JSON.parse(text);
-    const meta = d?.chart?.result?.[0]?.meta;
-    const price = meta?.regularMarketPrice;
-    if(price == null) throw new Error('no price');
-    return { price, currency: meta?.currency || 'USD' };
-  };
-  try{
-    return await Promise.any(proxyFns.map(fn => tryProxy(fn)));
-  }catch{
-    return null;
-  }
-}
-
-// Cache of EUR conversion rates for the current refresh cycle — several holdings often
-// share the same currency (e.g. multiple USD stocks), so we only fetch each rate once.
-let fxRateCache = {};
-export async function getEurConversionRate(currency){
-  if(!currency || currency==='EUR') return 1;
-  if(fxRateCache[currency] != null) return fxRateCache[currency];
-  const raw = await fetchYahooRaw(`EUR${currency}=X`);
-  fxRateCache[currency] = raw?.price || null;
-  return fxRateCache[currency];
-}
-
-// Public: fetch a stock/ETF/bond price, converted to EUR if it's quoted in another currency
-export async function fetchYahooPrice(ticker){
-  const raw = await fetchYahooRaw(ticker);
-  if(!raw){
-    console.warn(`Yahoo: could not fetch price for ${ticker}`);
-    return null;
-  }
-  if(!raw.currency || raw.currency==='EUR') return raw.price;
-  const rate = await getEurConversionRate(raw.currency);
-  if(!rate){
-    console.warn(`Yahoo: could not fetch ${raw.currency}→EUR rate — showing ${ticker} in its native currency`);
-    return raw.price;
-  }
-  return raw.price / rate;
-}
-
-const PRICE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-let lastPriceFetch = 0;
-
-export async function refreshPrices(force=false, silent=false){
-  const investable = state.holdings.filter(h=>!['bank','cash','dividend'].includes(h.type));
-  if(!investable.length){ renderHoldings(); return; }
-
-  // Use cached prices if fresh enough and not forced
-  const now = Date.now();
-  if(!force && now - lastPriceFetch < PRICE_CACHE_TTL && Object.keys(prices).length > 0){
-    renderHoldings(); renderOverview(); renderAllocation();
-    return;
-  }
-
-  fxRateCache = {}; // fetch fresh exchange rates this cycle
-
-  const hBtn = document.getElementById('h-refresh-btn');
-  const loadHTML = '<span class="spin"></span> Loading…';
-  if(hBtn){ hBtn.innerHTML = loadHTML; hBtn.disabled = true; }
-
-  const cryptoTickers    = [...new Set(investable.filter(h=>h.type==='crypto').map(h=>h.ticker))];
-  const nonCryptoTickers = [...new Set(investable.filter(h=>h.type!=='crypto').map(h=>h.ticker))];
-
-  // Fire crypto (1 batch) and all Yahoo requests simultaneously
-  const [cryptoPrices] = await Promise.all([
-    fetchAllCryptoPrices(cryptoTickers),
-    Promise.all(nonCryptoTickers.map(async t=>{
-      const p = await fetchYahooPrice(t);
-      if(p != null) state.prices[t] = p;
-    }))
-  ]);
-  Object.assign(state.prices, cryptoPrices);
-  lastPriceFetch = Date.now();
-
-  const timeStr = new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
-  if(hBtn){ hBtn.innerHTML = '<i class="ti ti-refresh"></i> Refresh prices'; hBtn.disabled = false; }
-  document.getElementById('refresh-info').textContent = 'Updated ' + timeStr;
-  renderHoldings(); renderOverview(); renderAllocation();
-
-  const allTickers = [...cryptoTickers, ...nonCryptoTickers];
-  const fetched = allTickers.filter(t=>state.prices[t]!=null).length;
-  const failed  = allTickers.filter(t=>state.prices[t]==null).length;
-  if(!silent){
-    if(fetched===0) toast('⚠️ Could not load any prices');
-    else if(failed>0) toast(`Prices updated — ${failed} ticker(s) unavailable`);
-    else toast(`✓ All ${fetched} price${fetched>1?'s':''} updated`);
   }
 }
 

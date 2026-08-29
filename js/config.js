@@ -1,14 +1,25 @@
 async function loadLocalEnv() {
   try {
-    const res = await fetch('./env.json');
-    if (!res.ok) return {};
-    return await res.json();
-  } catch {
+    const res = await fetch('/env.json', { cache: 'no-store' }); 
+
+    if (!res.ok) {
+      console.warn(`[env.json] Failed to load: Status ${res.status}`);
+      return {};
+    }
+
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    console.error('[env.json] Could not parse JSON file:', err);
     return {};
   }
 }
 
 const localEnv = await loadLocalEnv();
+
+
+// Cloudflare Worker URL
+export const CF_WORKER_PROXY = localEnv.CF_WORKER_PROXY;
 
 export const SUPABASE_URL = 
   localEnv.VITE_SUPABASE_URL ||
@@ -79,10 +90,17 @@ export const CF_FREQ_OPTIONS = [
 
 export function initAppEnv() {
   if (APP_ENV === 'dev') {
+    console.log('Development version...');
+
     const envBadge = document.getElementById('env-badge');
     if (envBadge) envBadge.style.display = 'inline-block';
     document.title = 'Financial Hub · DEV';
   }
+  else if (APP_ENV === 'prod')
+  {
+    console.log('Production version...');
+  }
+
   if (typeof Chart !== 'undefined') {
     Chart.defaults.font.family = "'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif";
     Chart.defaults.font.size = 11;
