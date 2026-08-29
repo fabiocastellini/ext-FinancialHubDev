@@ -1,0 +1,125 @@
+/* Mobile */
+/* ── BOTTOM TAB BAR ── */
+.bottom-tabs{display:none;position:fixed;bottom:0;left:0;right:0;height:64px;background:rgba(14,17,23,0.96);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid rgba(255,255,255,0.07);z-index:100;padding-bottom:env(safe-area-inset-bottom)}
+.bottom-tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:none;border:none;color:var(--text3);font-size:10px;font-weight:500;font-family:inherit;cursor:pointer;transition:color 0.15s;padding:6px 4px}
+.bottom-tab i{font-size:20px;line-height:1}
+@media(max-width:768px){
+  .btn:active{transform:scale(0.95);opacity:0.8;transition:none}
+  .bottom-tab:active{opacity:0.6;transition:none}
+  .holding-box-clickable:active{transform:scale(0.97);transition:none}
+  .cat-header:active{opacity:0.8;transition:none}
+  .cf-account-header:active{opacity:0.8;transition:none}
+  .bottom-tab-active-pulse{animation:none}
+}
+.bottom-tab.active{color:var(--accent)}
+.bottom-tab.active i{
+  background:rgba(16,212,176,0.12);
+  border-radius:12px;
+  padding:4px 14px;
+  display:inline-block;
+  filter:drop-shadow(0 0 6px rgba(16,212,176,0.35));
+  margin-bottom:1px;
+}
+
+/* ── MOBILE SUB-NAV ── */
+.mobile-subnav{display:none;gap:4px;margin-bottom:1.25rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px}
+.mobile-subnav-btn{flex:1;padding:8px;border:none;background:none;color:var(--text3);font-size:13px;font-weight:500;font-family:inherit;border-radius:var(--radius-xs);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all 0.15s}
+.mobile-subnav-btn.active{background:var(--surface3);color:var(--accent);font-weight:600}
+
+@media(max-width:768px){
+  .bottom-tabs{display:flex}
+  .tabnav{display:none}
+  .main{padding:1rem;padding-bottom:80px}
+  .topbar{padding:0 1rem;height:52px}
+  .topbar-left>div:last-child{display:none}
+  .mobile-subnav{display:flex}
+  .alloc-grid{grid-template-columns:1fr!important}
+  .ov-stats-grid{grid-template-columns:1fr}
+  .form-grid{grid-template-columns:1fr}
+  .holding-grid{grid-template-columns:1fr 1fr}
+  .ov-hero{padding:1.25rem}
+  .ov-hero-value{font-size:26px}
+  .holding-box-value{font-size:16px}
+  .holding-box-ghost{font-size:70px}
+  /* Prevent iOS Safari auto-zoom on input focus */
+  input,select,textarea{font-size:16px!important}
+  .cat-body{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .cat-body table{font-size:11px;width:100%}
+  .cat-body th,.cat-body td{padding:8px 6px;white-space:nowrap}
+  .cat-body td:first-child,.cat-body th:first-child{width:auto}
+  .cat-body .holding-actions{display:flex!important;justify-content:flex-end;gap:6px;min-width:80px}
+  .cat-body .cat-simple-row td,.cat-body .cat-simple-row th{padding:8px 6px}
+  .cat-total-val{font-size:14px}
+  .cf-tx-row{padding:10px 0.875rem;gap:8px}
+  .cf-tx-amount{font-size:13px}
+  .cf-account-header{padding:0.75rem 0.875rem;gap:8px}
+  .cf-account-val{text-align:right;flex-shrink:0;max-width:48%;overflow:hidden;min-width:0}
+  .cf-account-val-num{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cf-account-val .cf-account-pct{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cf-account-count{font-size:11px}
+  .cf-account-chevron{font-size:13px;flex-shrink:0}
+  .rpt-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .rpt-section{padding:1rem}
+  .rpt-summary{grid-template-columns:1fr 1fr}
+  .overlay{align-items:flex-end;padding:0}
+  .modal{max-width:100%;width:100%;border-radius:20px 20px 0 0;padding:1.5rem 1.25rem;padding-bottom:calc(1.5rem + env(safe-area-inset-bottom));max-height:90vh;overflow-y:auto}
+  .ins-section-block{padding:1rem;margin-bottom:1rem}
+  /* Chart heights at wrapper level — Chart.js reads parent, not canvas CSS */
+
+  .ins-section-header{font-size:13px}
+  /* Chart heights on mobile */
+  /* Chart heights controlled via wrapper divs, not canvas elements */
+
+  .recur-cal-wrapper{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -1rem;padding:0 1rem}
+  .recur-cal{font-size:10px;min-width:540px}
+  .recur-cal td{min-height:44px;padding:2px}
+  .recur-event{font-size:9px;padding:1px 3px}
+  /* Fix settings categories showing without names */
+  .settings-cat-row{min-width:0}
+  .settings-cat-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .page-header{flex-wrap:wrap;gap:10px;margin-bottom:1rem}
+  .page-title{font-size:17px}
+  .card{padding:1rem}
+  .cat-header{padding:0.75rem 0.875rem;gap:8px}
+  .cat-header .drag-handle{display:none}
+  .cat-icon{width:34px;height:34px;font-size:15px}
+  .cf-account-icon{width:34px;height:34px;font-size:15px}
+  .cat-icon{width:34px;height:34px;font-size:15px}
+  .cf-account-header{padding:0.75rem 0.875rem;gap:8px}
+  .cf-account-val{text-align:right;flex-shrink:0;max-width:48%;overflow:hidden;min-width:0}
+  .cf-account-val-num{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cf-account-val .cf-account-pct{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cf-account-count{font-size:11px}
+  .cf-account-chevron{font-size:13px;flex-shrink:0}
+  .cat-info{min-width:0;flex:1;overflow:hidden}
+  .cat-name{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .cat-count{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cat-total{text-align:right;flex-shrink:0;max-width:48%;overflow:hidden}
+  .cat-total-val{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cat-total-pct{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* Hide gain row from cat header on mobile — shown in expanded body */
+  .cat-total>div:nth-child(3){display:none!important}
+  .cat-chevron{font-size:13px;flex-shrink:0}
+  .cat-delete-btn.btn-sm{padding:3px 6px!important}
+  #live-price-indicator #refresh-info{display:none}
+}
+
+/* ── FIX OVERFLOW GRAFICI MOBILE ── */
+/* Previene espansione incontrollata dei contenitori Grid/Flex causata da Chart.js su device ad alto DPR */
+.alloc-grid,
+.alloc-grid > div,
+.card,
+.ins-section-block,
+.chart-wrap {
+  min-width: 0;
+  max-width: 100%;
+}
+/* Il canvas non può mai superare la larghezza del padre */
+.chart-wrap canvas {
+  max-width: 100%;
+}
+/* Sicurezza globale: impedisce scroll orizzontale imprevisto */
+html, body {
+  overflow-x: hidden;
+  width: 100%;
+}
