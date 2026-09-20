@@ -28,6 +28,9 @@ self.addEventListener('fetch', e => {
   // For API calls (Supabase) — always network, never cache
   if (e.request.url.includes('supabase.co') || e.request.url.includes('coingecko') || e.request.url.includes('yahoo')) return;
 
+  // Local runtime configuration may change without an app deployment.
+  if (new URL(e.request.url).pathname.endsWith('/app-config.local.js')) return;
+
   // For navigation (HTML) — network first, cache fallback
   if (e.request.mode === 'navigate') {
     e.respondWith(

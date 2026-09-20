@@ -1401,16 +1401,24 @@ html, body {
   </div>
 </div>
 
+<script src="app-config.local.js"></script>
 <script>
-const SUPABASE_URL = 'https://lwkkuoauvvfrwboasxbi.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3a2t1b2F1dnZmcndib2FzeGJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzMTQ3MzksImV4cCI6MjEwMDg5MDczOX0.Lg_pCz7gG3Qa5pfZgDmhzjn2fiHz7EUuT85O5SFXb54';
-const APP_ENV = 'dev'; // 'dev' shows a DEV badge in the header · set to 'prod' for the production copy
+const LOCAL_CONFIG = window.FINANCIAL_HUB_CONFIG || {};
+const SUPABASE_URL = LOCAL_CONFIG.SUPABASE_URL || '';
+const SUPABASE_KEY = LOCAL_CONFIG.SUPABASE_KEY || '';
+const APP_ENV = LOCAL_CONFIG.APP_ENV || 'dev'; // 'dev' shows a DEV badge in the header · set to 'prod' for the production copy
+// Live Server cannot serve the Cloudflare Worker routes under /api.  Use the
+// deployed Worker directly when developing locally; it sends the CORS headers
+// required by a browser request from http://localhost.
+// In development, this comes from .env via app-config.local.js (both ignored by Git).
+const PRICE_API_BASE = APP_ENV === 'prod' ? '' : (LOCAL_CONFIG.WORKER_API_BASE || '');
+if(APP_ENV==='dev'){
+  const envBadge=document.getElementById('env-badge');
+  if(envBadge) envBadge.style.display='inline-block';
+  document.title = 'Financial Hub · DEV';
+}
 
-// Dev price proxy (Deno Deploy — see dev-proxy-main.ts). Independent of prod's Cloudflare Worker.
-// Leave as '' to fall back to allOrigins (works, but takes several seconds per request).
-const DEV_PROXY = 'https://vague-platypus-1668.matteotaba.deno.net';
-
-const APP_SECRET = 'zW32WdZ6sjemsWkQqXUc4Fvfa6TxtvIq6H63FsKYdzc'; // sent on every Supabase call; RLS policies require this header to match
+const APP_SECRET = LOCAL_CONFIG.APP_SECRET || ''; // sent on every Supabase call; RLS policies require this header to match
 
 const api = (path, opts={}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
   headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, 'Content-Type':'application/json', Prefer:'return=representation', 'X-App-Secret':APP_SECRET, ...opts.headers },
@@ -2288,10 +2296,11 @@ async function searchCoinGecko(q){
 }
 
 async function searchYahoo(q){
-  // On prod (Cloudflare Workers) we have our own same-origin API route — no CORS proxy needed at all.
-  if(APP_ENV==='prod'){
+  // In production this is same-origin; under Live Server it targets the deployed
+  // Worker directly. Both paths avoid unreliable public CORS proxies.
+  if(APP_ENV==='prod' || PRICE_API_BASE){
     try{
-      const r = await fetch(`/api/yh-search?q=${encodeURIComponent(q)}`, {signal: AbortSignal.timeout(6000)});
+      const r = await fetch(`${PRICE_API_BASE}/api/yh-search?q=${encodeURIComponent(q)}`, {signal: AbortSignal.timeout(6000)});
       if(!r.ok) return null;
       const d = await r.json();
       return (d?.quotes||[]).filter(x=>x.symbol && x.quoteType!=='CURRENCY').map(r=>({
@@ -2676,9 +2685,9 @@ async function fetchAllCryptoPrices(tickers){
 // Yahoo Finance via CORS proxy for stocks/ETFs/bonds
 // Low-level: fetch the raw price + currency for any Yahoo ticker (a stock, or an FX pair like 'EURUSD=X')
 async function fetchYahooRaw(ticker){
-  if(APP_ENV==='prod'){
+  if(APP_ENV==='prod' || PRICE_API_BASE){
     try{
-      const r = await fetch(`/api/yh-price?ticker=${encodeURIComponent(ticker)}`, {signal: AbortSignal.timeout(5000)});
+      const r = await fetch(`${PRICE_API_BASE}/api/yh-price?ticker=${encodeURIComponent(ticker)}`, {signal: AbortSignal.timeout(5000)});
       if(!r.ok) throw new Error('not ok');
       const d = await r.json();
       const meta = d?.chart?.result?.[0]?.meta;
