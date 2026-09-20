@@ -1411,7 +1411,7 @@ const APP_ENV = LOCAL_CONFIG.APP_ENV || 'dev'; // 'dev' shows a DEV badge in the
 // deployed Worker directly when developing locally; it sends the CORS headers
 // required by a browser request from http://localhost.
 // In development, this comes from .env via app-config.local.js (both ignored by Git).
-const PRICE_API_BASE = APP_ENV === 'prod' ? '' : (LOCAL_CONFIG.WORKER_API_BASE || '');
+const PRICE_API_BASE = APP_ENV === 'prod' ? '' : (LOCAL_CONFIG.WORKER_API_BASE || '').replace(/\/+$/, '');
 if(APP_ENV==='dev'){
   const envBadge=document.getElementById('env-badge');
   if(envBadge) envBadge.style.display='inline-block';
@@ -2313,21 +2313,6 @@ async function searchYahoo(q){
     }
   }
 
-  // Dev: use our own Deno Deploy proxy when configured — fast (~100ms) and reliable.
-  if(DEV_PROXY){
-    try{
-      const r = await fetch(`${DEV_PROXY}/api/yh-search?q=${encodeURIComponent(q)}`, {signal: AbortSignal.timeout(8000)});
-      if(r.ok){
-        const d = await r.json();
-        if(d?.quotes?.length) return d.quotes.filter(x=>x.symbol && x.quoteType!=='CURRENCY').map(r=>({
-          symbol: r.symbol,
-          name: r.longname||r.shortname||r.symbol,
-          exch: r.exchDisp||r.exchange||''
-        }));
-      }
-    }catch{ /* fall through to the public proxies below */ }
-  }
-
   // Dev / non-Worker environments: fall back to public CORS proxies (best-effort, may be flaky)
   const yhSearch = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&lang=en-US&region=US&quotesCount=8&newsCount=0&enableFuzzyQuery=false&enableCb=false`;
   const proxyFns = [
@@ -2697,18 +2682,6 @@ async function fetchYahooRaw(ticker){
     }catch{
       return null;
     }
-  }
-
-  // Dev: use our own Deno Deploy proxy when configured (see searchYahoo).
-  if(DEV_PROXY){
-    try{
-      const r = await fetch(`${DEV_PROXY}/api/yh-price?ticker=${encodeURIComponent(ticker)}`, {signal: AbortSignal.timeout(8000)});
-      if(r.ok){
-        const d = await r.json();
-        const meta = d?.chart?.result?.[0]?.meta;
-        if(meta?.regularMarketPrice != null) return { price: meta.regularMarketPrice, currency: meta.currency || 'USD' };
-      }
-    }catch{ /* fall through to the public proxies below */ }
   }
 
   // Dev / non-Worker environments: fall back to public CORS proxies (best-effort, may be flaky)
