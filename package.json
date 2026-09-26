@@ -1,0 +1,13 @@
+{
+  "name": "financial-hub",
+  "private": true,
+  "scripts": {
+    "run": "make run",
+    "stop": "make del"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "kill-port": "^2.0.1",
+    "live-server": "^1.2.2"
+  }
+}

@@ -1406,9 +1406,12 @@ const SUPABASE_URL = 'https://lwkkuoauvvfrwboasxbi.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3a2t1b2F1dnZmcndib2FzeGJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzMTQ3MzksImV4cCI6MjEwMDg5MDczOX0.Lg_pCz7gG3Qa5pfZgDmhzjn2fiHz7EUuT85O5SFXb54';
 const APP_ENV = 'dev'; // 'dev' shows a DEV badge in the header · set to 'prod' for the production copy
 
-// Dev price proxy (Deno Deploy — see dev-proxy-main.ts). Independent of prod's Cloudflare Worker.
-// Leave as '' to fall back to allOrigins (works, but takes several seconds per request).
-const DEV_PROXY = 'https://vague-platypus-1668.matteotaba.deno.net';
+// Local development uses the companion Node proxy (node local-proxy.mjs).
+const IS_LOCAL = ['localhost','127.0.0.1','::1'].includes(location.hostname);
+const DEV_PROXY = IS_LOCAL
+  ? 'http://127.0.0.1:8787'
+  : 'https://vague-platypus-1668.matteotaba.deno.net';
+const USE_DEV_PROXY = !!DEV_PROXY;
 
 const APP_SECRET = 'zW32WdZ6sjemsWkQqXUc4Fvfa6TxtvIq6H63FsKYdzc'; // sent on every Supabase call; RLS policies require this header to match
 
@@ -2305,7 +2308,7 @@ async function searchYahoo(q){
   }
 
   // Dev: use our own Deno Deploy proxy when configured — fast (~100ms) and reliable.
-  if(DEV_PROXY){
+  if(USE_DEV_PROXY){
     try{
       const r = await fetch(`${DEV_PROXY}/api/yh-search?q=${encodeURIComponent(q)}`, {signal: AbortSignal.timeout(8000)});
       if(r.ok){
@@ -2691,7 +2694,7 @@ async function fetchYahooRaw(ticker){
   }
 
   // Dev: use our own Deno Deploy proxy when configured (see searchYahoo).
-  if(DEV_PROXY){
+  if(USE_DEV_PROXY){
     try{
       const r = await fetch(`${DEV_PROXY}/api/yh-price?ticker=${encodeURIComponent(ticker)}`, {signal: AbortSignal.timeout(8000)});
       if(r.ok){
