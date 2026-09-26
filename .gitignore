@@ -1,0 +1,4 @@
+.env
+.env.*
+app-config.local.js
+node_modules/

@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Financial Hub">
 <title>Financial Hub</title>
+<script src="app-config.local.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js">
 if(APP_ENV==='dev'){
   const envBadge=document.getElementById('env-badge');
@@ -1402,9 +1403,11 @@ html, body {
 </div>
 
 <script>
-const SUPABASE_URL = 'https://lwkkuoauvvfrwboasxbi.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3a2t1b2F1dnZmcndib2FzeGJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzMTQ3MzksImV4cCI6MjEwMDg5MDczOX0.Lg_pCz7gG3Qa5pfZgDmhzjn2fiHz7EUuT85O5SFXb54';
-const APP_ENV = 'dev'; // 'dev' shows a DEV badge in the header · set to 'prod' for the production copy
+const CONFIG = window.FINANCIAL_HUB_CONFIG;
+if (!CONFIG) throw new Error('Missing app-config.local.js. Run `npm run config` first.');
+const SUPABASE_URL = CONFIG.SUPABASE_URL;
+const SUPABASE_KEY = CONFIG.SUPABASE_KEY;
+const APP_ENV = CONFIG.APP_ENV; // 'dev' shows a DEV badge in the header · set to 'prod' for the production copy
 
 // Local development uses the companion Node proxy (node local-proxy.mjs).
 const IS_LOCAL = ['localhost','127.0.0.1','::1'].includes(location.hostname);
@@ -1413,7 +1416,7 @@ const DEV_PROXY = IS_LOCAL
   : 'https://vague-platypus-1668.matteotaba.deno.net';
 const USE_DEV_PROXY = !!DEV_PROXY;
 
-const APP_SECRET = 'zW32WdZ6sjemsWkQqXUc4Fvfa6TxtvIq6H63FsKYdzc'; // sent on every Supabase call; RLS policies require this header to match
+const APP_SECRET = CONFIG.APP_SECRET; // Browser-visible; this cannot be used as a private credential.
 
 const api = (path, opts={}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
   headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, 'Content-Type':'application/json', Prefer:'return=representation', 'X-App-Secret':APP_SECRET, ...opts.headers },

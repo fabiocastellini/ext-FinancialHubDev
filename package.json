@@ -2,6 +2,7 @@
   "name": "financial-hub",
   "private": true,
   "scripts": {
+    "config": "node scripts/generate-config.mjs",
     "run": "make run",
     "stop": "make del"
   },
